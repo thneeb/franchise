@@ -1,0 +1,355 @@
+openapi: 3.0.2
+info:
+  title: franchise
+  version: 1.0.0
+  contact:
+    name: Thomas Neeb
+    email: thomas.neeb@nttdata.com
+paths:
+  /franchise:
+    post:
+      operationId: initializeGame
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/GameConfig'
+      responses:
+        '201':
+          description: Returns the actual game field for the given id
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/GameField'
+  /franchise/{gameId}:
+    parameters:
+      -
+        name: gameId
+        schema:
+          type: string
+        required: true
+        in: path
+    get:
+      operationId: retrieveGameBoard
+      responses:
+        '200':
+          description: Returns the actual game field for the given id
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/GameField'
+  /franchise/{gameId}/draws:
+    parameters:
+      -
+        name: gameId
+        schema:
+          type: string
+        required: true
+        in: path
+    get:
+      operationId: evaluateNextPossibleDraws
+      responses:
+        '200':
+          description: Returns all next possible draws
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HumanDraw'
+    post:
+      operationId: createDraw
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/Draw'
+      responses:
+        '200':
+          description: Returns the played draw
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ExtendedDraw'
+  /franchise/{gameId}/draws/{index}:
+    parameters:
+      -
+        name: gameId
+        schema:
+          type: string
+        required: true
+        in: path
+      -
+        name: index
+        schema:
+          type: integer
+        required: true
+        in: path
+    get:
+      operationId: retrieveDraw
+      responses:
+        '200':
+          description: Returns the draw for the given index
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/HumanDraw'
+    delete:
+      operationId: undoDraws
+      responses:
+        '200':
+          description: Returns the actual game field for the given id
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/GameField'
+  /franchise/{gameId}/learnings:
+    parameters:
+      -
+        name: gameId
+        schema:
+          type: string
+        required: true
+        in: path
+    post:
+      operationId: playGame
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/PlayConfig'
+      responses:
+        '200':
+          description: Returns the played draw
+          content:
+            'application/json':
+              schema:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PlayerColorAndInteger'
+components:
+  schemas:
+    ExtendedDraw:
+      properties:
+        draw:
+          $ref: '#/components/schemas/HumanDraw'
+        info:
+          properties:
+            income:
+              type: integer
+            influence:
+              type: array
+              items:
+                type: string
+    GameField:
+      properties:
+        end:
+          type: boolean
+        initialization:
+          type: boolean
+        bonusTileUsable:
+          type: boolean
+        round:
+          type: integer
+        next:
+          $ref: '#/components/schemas/PlayerColor'
+        cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/CityPlate'
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/Player'
+        firstCities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerRegion'
+        closedRegions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Region'
+    CityPlate:
+      properties:
+        city:
+          $ref: '#/components/schemas/City'
+        size:
+          type: integer
+        closed:
+          type: boolean
+        branches:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColor'
+        extensionCosts:
+          type: integer
+    Player:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        money:
+          type: integer
+        influence:
+          type: integer
+        income:
+          type: integer
+        bonusTiles:
+          type: integer
+    Draw:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        playerType:
+          $ref: '#/components/schemas/PlayerType'
+      discriminator:
+        propertyName: playerType
+        mapping:
+          COMPUTER: '#/components/schemas/ComputerPlayer'
+          HUMAN: '#/components/schemas/HumanDraw'
+    HumanDraw:
+        allOf:
+          - $ref: '#/components/schemas/Draw'
+          - properties:
+              extension:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+              increase:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+              bonusTileUsage:
+                $ref: '#/components/schemas/BonusTileUsage'
+    ComputerPlayer:
+      allOf:
+        - $ref: '#/components/schemas/Draw'
+        - properties:
+            strategy:
+              $ref: '#/components/schemas/ComputerStrategy'
+            params:
+              additionalProperties:
+                type: object
+    PlayerType:
+      type: string
+      enum:
+        - HUMAN
+        - COMPUTER
+    ComputerStrategy:
+      enum:
+        - MONTE_CARLO_TREE_SEARCH
+        - MAXIMAX
+        - MINIMAX
+        - AB_PRUNE
+        - DIVIDE_AND_CONQUER
+        - MACHINE_LEARNING
+        - REINFORCEMENT_LEARNING
+        - Q_LEARNING
+        - DL4J_NEURAL_NETWORK
+    PlayerRegion:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        region:
+          $ref: '#/components/schemas/Region'
+    GameConfig:
+      properties:
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColor'
+        learningModels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComputerStrategy'
+    PlayConfig:
+      properties:
+        timesToPlay:
+          type: integer
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComputerPlayer'
+        learningModels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComputerStrategy'
+        params:
+          additionalProperties:
+            type: object
+    PlayerColorAndInteger:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        value:
+          type: integer
+    BonusTileUsage:
+      enum:
+        - MONEY
+        - EXTENSION
+        - INCREASE
+    PlayerColor:
+      enum:
+        - RED
+        - BLUE
+        - WHITE
+        - ORANGE
+        - BLACK
+    City:
+      enum:
+        - SAN_FRANCISCO
+        - LOS_ANGELES
+        - LAS_VEGAS
+        - RENO
+        - FLAGSTAFF
+        - PHOENIX
+        - ALBUQUERQUE
+        - PUEBLO
+        - DENVER
+        - SALT_LAKE_CITY
+        - SEATTLE
+        - PORTLAND
+        - SPOKANE
+        - BOISE
+        - POCATELLO
+        - CONRAD
+        - BILLINGS
+        - CASPER
+        - FARGO
+        - SIOUX_FALLS
+        - MINNEAPOLIS
+        - CHICAGO
+        - DETROIT
+        - INDIANAPOLIS
+        - PITTSBURGH
+        - NEW_YORK
+        - WASHINGTON
+        - CHARLOTTE
+        - RALEIGH
+        - CHARLESTON
+        - JACKSONVILLE
+        - ATLANTA
+        - MONTGOMERY
+        - HUNTSVILLE
+        - MEMPHIS
+        - LITTLE_ROCK
+        - ST_LOUIS
+        - KANSAS_CITY
+        - OMAHA
+        - OGALLALA
+        - DODGE_CITY
+        - HOUSTON
+        - DALLAS
+        - OKLAHOMA_CITY
+        - EL_PASO
+    Region:
+      enum:
+        - CALIFORNIA
+        - GRAND_CANYON
+        - UPPER_WEST
+        - MONTANA
+        - GREAT_LAKES
+        - NEW_YORK
+        - WASHINGTON
+        - FLORIDA
+        - CENTRAL
+        - TEXAS
