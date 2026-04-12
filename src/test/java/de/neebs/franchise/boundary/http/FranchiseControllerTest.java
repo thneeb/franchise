@@ -93,46 +93,32 @@ class FranchiseControllerTest {
 
     @Test
     void evaluateNextPossibleDraws_twoPlayerGame_excludesInactiveRegions() throws Exception {
-        // 2-player games have 3 inactive regions — their small towns must not appear in draws
+        // 2-player games always deactivate CALIFORNIA, GRAND_CANYON, MONTANA.
+        // Their small towns: LAS_VEGAS, RENO (CA), FLAGSTAFF, PUEBLO, SALT_LAKE_CITY (GC),
+        //                    CONRAD, BILLINGS, CASPER, FARGO, SIOUX_FALLS (MT) — 10 towns blocked.
+        // 22 total small towns − 10 blocked = 12 available.
         String gameId = createGame("RED", "BLUE");
 
-        // Retrieve the game board to find which regions are inactive
-        MvcResult boardResult = mockMvc.perform(get("/franchise/{gameId}", gameId))
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.inactiveRegions", hasSize(3)))
-                .andReturn();
+                .andExpect(jsonPath("$.inactiveRegions", containsInAnyOrder(
+                        "CALIFORNIA", "GRAND_CANYON", "MONTANA")));
 
-        com.fasterxml.jackson.databind.JsonNode board =
-                objectMapper.readTree(boardResult.getResponse().getContentAsString());
-        java.util.Set<String> inactiveRegions = new java.util.HashSet<>();
-        board.get("inactiveRegions").forEach(r -> inactiveRegions.add(r.asText()));
-
-        // Collect city names belonging to inactive regions
-        java.util.Set<String> blockedCities = new java.util.HashSet<>();
-        for (de.neebs.franchise.entity.Region region : de.neebs.franchise.entity.Region.values()) {
-            if (inactiveRegions.contains(region.name())) {
-                region.getCities().stream()
-                        .filter(c -> c.getSize() == 1)
-                        .map(Enum::name)
-                        .forEach(blockedCities::add);
-            }
-        }
-
-        // Possible draws must not include any blocked small town
-        MvcResult drawsResult = mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
+        mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
                 .andExpect(status().isOk())
-                .andReturn();
-
-        objectMapper.readTree(drawsResult.getResponse().getContentAsString())
-                .forEach(draw -> {
-                    draw.get("extension").forEach(city -> {
-                        String cityName = city.asText();
-                        if (blockedCities.contains(cityName)) {
-                            throw new AssertionError(
-                                    "Inactive region city appeared in draws: " + cityName);
-                        }
-                    });
-                });
+                .andExpect(jsonPath("$", hasSize(12)))
+                // None of the inactive-region small towns may appear
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("LAS_VEGAS"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("RENO"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("FLAGSTAFF"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("PUEBLO"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("SALT_LAKE_CITY"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("CONRAD"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("BILLINGS"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("CASPER"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("FARGO"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("SIOUX_FALLS"))));
     }
 
     @Test
@@ -284,8 +270,8 @@ class FranchiseControllerTest {
     @Test
     void undoDraws_removesDrawsFromIndex() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         // Undo back to index 1 — keeps only draw 0 (BLUE's draw)
         mockMvc.perform(delete("/franchise/{gameId}/draws/{index}", gameId, 1))
@@ -293,11 +279,11 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.initialization").value(true))
                 .andExpect(jsonPath("$.next").value("RED"));
 
-        // LAS_VEGAS still occupied, RENO is empty again
+        // INDIANAPOLIS still occupied, MEMPHIS is empty again
         mockMvc.perform(get("/franchise/{gameId}", gameId))
-                .andExpect(jsonPath("$.cities[?(@.city=='LAS_VEGAS')].branches[0]").value("BLUE"))
-                // JSONPath filter returns array; RENO's first slot should be null (unoccupied)
-                .andExpect(jsonPath("$.cities[?(@.city=='RENO')].branches[0]", contains(nullValue())));
+                .andExpect(jsonPath("$.cities[?(@.city=='INDIANAPOLIS')].branches[0]").value("BLUE"))
+                // JSONPath filter returns array; MEMPHIS's first slot should be null (unoccupied)
+                .andExpect(jsonPath("$.cities[?(@.city=='MEMPHIS')].branches[0]", contains(nullValue())));
     }
 
     // -------------------------------------------------------------------------
@@ -345,25 +331,25 @@ class FranchiseControllerTest {
     @Test
     void expand_twoCity_withExtensionBonus_succeeds() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
         skipTurn(gameId, "RED"); // advance past round 1
 
-        // BLUE on round 2 — expand to 2 different cities with EXTENSION bonus
+        // BLUE on round 2 — expand to 2 different active cities with EXTENSION bonus
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"playerType":"HUMAN","color":"BLUE",
                                  "bonusTileUsage":"EXTENSION",
-                                 "extension":["FLAGSTAFF","LOS_ANGELES"]}
+                                 "extension":["RALEIGH","HUNTSVILLE"]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.extension", hasSize(2)));
 
         // Both cities should now have BLUE's branch
         mockMvc.perform(get("/franchise/{gameId}", gameId))
-                .andExpect(jsonPath("$.cities[?(@.city=='FLAGSTAFF')].branches[0]").value("BLUE"))
-                .andExpect(jsonPath("$.cities[?(@.city=='LOS_ANGELES')].branches[0]").value("BLUE"));
+                .andExpect(jsonPath("$.cities[?(@.city=='RALEIGH')].branches[0]").value("BLUE"))
+                .andExpect(jsonPath("$.cities[?(@.city=='HUNTSVILLE')].branches[0]").value("BLUE"));
     }
 
     @Test

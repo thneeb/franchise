@@ -125,12 +125,10 @@ public class FranchiseService {
         state.setRegionTrackIndex(0);
         state.setDrawHistory(new ArrayList<>());
 
-        // 2- or 3-player adjustment: three regions are inactive
+        // 2- or 3-player adjustment: three fixed regions are inactive
         List<Region> inactive = new ArrayList<>();
         if (players.size() <= 3) {
-            List<Region> all = new ArrayList<>(List.of(Region.values()));
-            Collections.shuffle(all);
-            inactive = all.subList(0, 3);
+            inactive = List.of(Region.CALIFORNIA, Region.GRAND_CANYON, Region.MONTANA);
             applyInactiveRegions(state, inactive);
         }
         state.setInactiveRegions(new ArrayList<>(inactive));
