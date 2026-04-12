@@ -216,43 +216,37 @@ public class FranchiseService {
     private int applyNormalDraw(GameState state, PlayerColor player, DrawRecord draw,
                                  List<String> log) {
         BonusTileUsage bonus = draw.getBonusTileUsage();
+        List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
+        List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
 
-        // Validate bonus tile usage
+        // --- Validate everything before mutating state ---
+
         if (bonus != null) {
             if (state.getRound() <= 1) {
                 throw new IllegalArgumentException("Bonus tiles cannot be used on the first turn");
             }
-            Score s = state.getScores().get(player);
-            if (s.getBonusTiles() <= 0) {
+            if (state.getScores().get(player).getBonusTiles() <= 0) {
                 throw new IllegalArgumentException("No bonus tiles remaining");
-            }
-            s.setBonusTiles(s.getBonusTiles() - 1);
-            if (bonus == BonusTileUsage.MONEY) {
-                s.setMoney(s.getMoney() + 10);
             }
         }
 
-        // Phase 1: Income
-        int income = calcIncome(state, player);
-        Score score = state.getScores().get(player);
-        score.setMoney(score.getMoney() + income);
-        score.setIncome(income);
-
-        List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
-        List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
-
-        // Validate Phase 2: at most 1 expansion; 2 only with EXTENSION bonus tile
-        int maxExtensions = (bonus == BonusTileUsage.EXTENSION) ? 2 : 1;
-        if (extensions.size() > maxExtensions) {
-            throw new IllegalArgumentException(
-                    "Cannot expand to more than " + maxExtensions + " city/cities per turn"
-                    + (bonus == null ? " without a bonus tile" : ""));
+        // EXTENSION bonus requires exactly 2 cities; without it at most 1
+        if (bonus == BonusTileUsage.EXTENSION) {
+            if (extensions.size() != 2) {
+                throw new IllegalArgumentException(
+                        "EXTENSION bonus tile requires exactly 2 cities to expand to");
+            }
+        } else {
+            if (extensions.size() > 1) {
+                throw new IllegalArgumentException(
+                        "Cannot expand to more than 1 city/cities per turn without a bonus tile");
+            }
         }
         if (extensions.size() == 2 && extensions.get(0).equals(extensions.get(1))) {
             throw new IllegalArgumentException("Cannot expand to the same city twice");
         }
 
-        // Validate Phase 3: can only increase in cities with a pre-existing branch,
+        // Can only increase in cities with a pre-existing branch,
         // not in cities being expanded to this same turn (expansion marker ≠ branch)
         Set<City> validIncreases = validIncreaseCities(state, player, extensions);
         for (City city : increases) {
@@ -263,10 +257,25 @@ public class FranchiseService {
             }
         }
 
+        // --- All validation passed; now mutate state ---
+
+        Score score = state.getScores().get(player);
+        if (bonus != null) {
+            score.setBonusTiles(score.getBonusTiles() - 1);
+            if (bonus == BonusTileUsage.MONEY) {
+                score.setMoney(score.getMoney() + 10);
+            }
+        }
+
+        // Phase 1: Income
+        int income = calcIncome(state, player);
+        score.setMoney(score.getMoney() + income);
+        score.setIncome(income);
+
         // Phase 2: Pay expansion route costs
         for (City target : extensions) {
             int cost = minExpansionCost(state, player, target);
-            state.getScores().get(player).setMoney(score.getMoney() - cost);
+            score.setMoney(score.getMoney() - cost);
         }
 
         // Phase 3: Pay $1 per increase (first is free with INCREASE bonus)

@@ -320,7 +320,36 @@ class FranchiseControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(
-                        containsString("Cannot expand to more than 1")));
+                        containsString("Cannot expand to more than 1 city/cities per turn")));
+    }
+
+    @Test
+    void expand_extensionBonus_withOneCity_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
+        performInitDraw(gameId, "RED", "RENO");
+        skipTurn(gameId, "RED"); // advance past round 1
+
+        // BLUE on round 2 — uses EXTENSION bonus but only provides 1 city → rejected
+        int tilesBefore = objectMapper.readTree(
+                mockMvc.perform(get("/franchise/{gameId}", gameId))
+                        .andReturn().getResponse().getContentAsString())
+                .at("/players/1/bonusTiles").asInt(); // BLUE is player index 1
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE",
+                                 "bonusTileUsage":"EXTENSION",
+                                 "extension":["RALEIGH"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        containsString("EXTENSION bonus tile requires exactly 2 cities")));
+
+        // Bonus tile must NOT have been consumed
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(jsonPath("$.players[1].bonusTiles").value(tilesBefore));
     }
 
     @Test
