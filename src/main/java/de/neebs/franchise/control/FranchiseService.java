@@ -324,11 +324,17 @@ public class FranchiseService {
             throw new IllegalArgumentException("Cannot expand to the same city twice");
         }
 
-        // Each extension target must be directly reachable from an occupied city
+        // Each extension target must be a valid expansion target:
+        // directly reachable, not closed, not already occupied by this player
         for (City target : extensions) {
             if (minExpansionCost(state, player, target).isEmpty()) {
                 throw new IllegalArgumentException(
                         "Cannot reach " + target.getName() + " from any occupied city");
+            }
+            if (!isValidTarget(state, player, target)) {
+                throw new IllegalArgumentException(
+                        "Cannot expand to " + target.getName()
+                        + ": city is closed, full, or you already have a branch there");
             }
         }
 

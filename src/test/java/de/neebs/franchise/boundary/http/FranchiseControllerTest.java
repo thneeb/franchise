@@ -404,6 +404,25 @@ class FranchiseControllerTest {
     }
 
     @Test
+    void expand_toOwnCity_returns400() throws Exception {
+        // BLUE expands to CHARLOTTE in round 1; trying again in round 2 must return 400
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+        skipTurn(gameId, "RED");
+        performExpand(gameId, "BLUE", "CHARLOTTE"); // BLUE now has a branch in CHARLOTTE
+        skipTurn(gameId, "RED");
+        // BLUE tries to expand to CHARLOTTE again
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","extension":["CHARLOTTE"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("already have a branch")));
+    }
+
+    @Test
     void increase_doubleIncrease_withIncreaseBonusTile_succeeds() throws Exception {
         // BLUE at INDIANAPOLIS → expands to CHARLOTTE (cost 0, size 3, 2 free slots after expansion)
         // Then BLUE uses INCREASE bonus to double-increase in CHARLOTTE

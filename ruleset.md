@@ -93,6 +93,8 @@ Pay the route cost to the bank. You may skip expansion entirely.
 
 > You cannot skip over intermediate cities or small towns — you must always move to an adjacent location.
 
+> **Expansion vs. increase:** You can never expand (Phase 2) to a city where you already have a branch — that is only possible via **increase** (Phase 3). Even with the Double Expansion bonus tile, both target cities must be ones where you have no existing branch.
+
 ---
 
 ### Phase 3: Increase Market Share in Cities
