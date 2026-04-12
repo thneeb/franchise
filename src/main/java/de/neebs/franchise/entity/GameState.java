@@ -17,6 +17,7 @@ public class GameState {
     private List<Region> closedRegions;
     private Map<Region, PlayerColor> regionFirstScorer;
     private int regionTrackIndex;
+    private List<Region> inactiveRegions;
     private List<DrawRecord> drawHistory;
 
     public String getId() { return id; }
@@ -57,6 +58,9 @@ public class GameState {
 
     public int getRegionTrackIndex() { return regionTrackIndex; }
     public void setRegionTrackIndex(int regionTrackIndex) { this.regionTrackIndex = regionTrackIndex; }
+
+    public List<Region> getInactiveRegions() { return inactiveRegions; }
+    public void setInactiveRegions(List<Region> inactiveRegions) { this.inactiveRegions = inactiveRegions; }
 
     public List<DrawRecord> getDrawHistory() { return drawHistory; }
     public void setDrawHistory(List<DrawRecord> drawHistory) { this.drawHistory = drawHistory; }

@@ -124,7 +124,31 @@ public class FranchiseService {
         state.setRegionFirstScorer(new EnumMap<>(Region.class));
         state.setRegionTrackIndex(0);
         state.setDrawHistory(new ArrayList<>());
+
+        // 2- or 3-player adjustment: three regions are inactive
+        List<Region> inactive = new ArrayList<>();
+        if (players.size() <= 3) {
+            List<Region> all = new ArrayList<>(List.of(Region.values()));
+            Collections.shuffle(all);
+            inactive = all.subList(0, 3);
+            applyInactiveRegions(state, inactive);
+        }
+        state.setInactiveRegions(new ArrayList<>(inactive));
+
         return state;
+    }
+
+    private void applyInactiveRegions(GameState state, List<Region> inactive) {
+        for (Region region : inactive) {
+            for (City city : region.getCities()) {
+                // Fill every slot with NEUTRAL — makes the city appear fully occupied
+                Arrays.fill(state.getCityBranches().get(city), PlayerColor.NEUTRAL);
+                // City tiles are removed: treat them as already scored
+                state.getClosedCities().add(city);
+            }
+            // Region itself is blocked — no scoring possible
+            state.getClosedRegions().add(region);
+        }
     }
 
     private Map<PlayerColor, Integer> initSupply(List<PlayerColor> players) {

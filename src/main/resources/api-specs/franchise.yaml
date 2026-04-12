@@ -176,6 +176,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Region'
+        inactiveRegions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Region'
     CityPlate:
       properties:
         city:
@@ -301,6 +305,7 @@ components:
         - WHITE
         - ORANGE
         - BLACK
+        - NEUTRAL
     City:
       enum:
         - SAN_FRANCISCO

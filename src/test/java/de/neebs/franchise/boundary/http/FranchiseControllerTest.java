@@ -82,13 +82,57 @@ class FranchiseControllerTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void evaluateNextPossibleDraws_duringInit_returnsAllUnoccupiedTowns() throws Exception {
-        String gameId = createGame("RED", "BLUE");
+    void evaluateNextPossibleDraws_fivePlayerGame_returnsAll22Towns() throws Exception {
+        // 5-player games have no inactive regions — all 22 small towns are available
+        String gameId = createGame("RED", "BLUE", "WHITE", "ORANGE", "BLACK");
 
         mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
                 .andExpect(status().isOk())
-                // 22 small towns (size == 1) in City enum
                 .andExpect(jsonPath("$", hasSize(22)));
+    }
+
+    @Test
+    void evaluateNextPossibleDraws_twoPlayerGame_excludesInactiveRegions() throws Exception {
+        // 2-player games have 3 inactive regions — their small towns must not appear in draws
+        String gameId = createGame("RED", "BLUE");
+
+        // Retrieve the game board to find which regions are inactive
+        MvcResult boardResult = mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inactiveRegions", hasSize(3)))
+                .andReturn();
+
+        com.fasterxml.jackson.databind.JsonNode board =
+                objectMapper.readTree(boardResult.getResponse().getContentAsString());
+        java.util.Set<String> inactiveRegions = new java.util.HashSet<>();
+        board.get("inactiveRegions").forEach(r -> inactiveRegions.add(r.asText()));
+
+        // Collect city names belonging to inactive regions
+        java.util.Set<String> blockedCities = new java.util.HashSet<>();
+        for (de.neebs.franchise.entity.Region region : de.neebs.franchise.entity.Region.values()) {
+            if (inactiveRegions.contains(region.name())) {
+                region.getCities().stream()
+                        .filter(c -> c.getSize() == 1)
+                        .map(Enum::name)
+                        .forEach(blockedCities::add);
+            }
+        }
+
+        // Possible draws must not include any blocked small town
+        MvcResult drawsResult = mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        objectMapper.readTree(drawsResult.getResponse().getContentAsString())
+                .forEach(draw -> {
+                    draw.get("extension").forEach(city -> {
+                        String cityName = city.asText();
+                        if (blockedCities.contains(cityName)) {
+                            throw new AssertionError(
+                                    "Inactive region city appeared in draws: " + cityName);
+                        }
+                    });
+                });
     }
 
     @Test

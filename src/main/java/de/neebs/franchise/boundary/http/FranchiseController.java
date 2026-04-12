@@ -118,8 +118,14 @@ public class FranchiseController implements FranchiseApi {
                 .collect(Collectors.toList());
 
         List<Region> closedRegions = state.getClosedRegions().stream()
+                .filter(r -> state.getInactiveRegions() == null || !state.getInactiveRegions().contains(r))
                 .map(r -> Region.valueOf(r.name()))
                 .collect(Collectors.toList());
+
+        List<Region> inactiveRegions = state.getInactiveRegions() == null ? List.of() :
+                state.getInactiveRegions().stream()
+                        .map(r -> Region.valueOf(r.name()))
+                        .collect(Collectors.toList());
 
         return new GameField()
                 .id(state.getId())
@@ -131,7 +137,8 @@ public class FranchiseController implements FranchiseApi {
                 .cities(cityPlates)
                 .players(players)
                 .firstCities(firstCities)
-                .closedRegions(closedRegions);
+                .closedRegions(closedRegions)
+                .inactiveRegions(inactiveRegions);
     }
 
     private CityPlate toCityPlate(GameState state, de.neebs.franchise.entity.City city,
