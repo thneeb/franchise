@@ -75,6 +75,11 @@ public class FranchiseService {
             draws.add(draw(player, List.of(target), List.of(), null));
         }
 
+        // Valid increase targets (pre-existing branch required; expansion marker doesn't count)
+        for (City target : validIncreaseCities(state, player, List.of())) {
+            draws.add(draw(player, List.of(), List.of(target), null));
+        }
+
         return draws;
     }
 
@@ -180,6 +185,17 @@ public class FranchiseService {
 
         List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
         List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
+
+        // Validate Phase 3: can only increase in cities with a pre-existing branch,
+        // not in cities being expanded to this same turn (expansion marker ≠ branch)
+        Set<City> validIncreases = validIncreaseCities(state, player, extensions);
+        for (City city : increases) {
+            if (!validIncreases.contains(city)) {
+                throw new IllegalArgumentException(
+                        "Cannot increase in " + city.getName()
+                        + ": no pre-existing branch there");
+            }
+        }
 
         // Phase 2: Pay expansion route costs
         for (City target : extensions) {
@@ -487,6 +503,25 @@ public class FranchiseService {
     // -------------------------------------------------------------------------
     // Expansion helpers
     // -------------------------------------------------------------------------
+
+    private Set<City> validIncreaseCities(GameState state, PlayerColor player,
+                                           List<City> extensions) {
+        Set<City> result = new HashSet<>();
+        for (City city : City.values()) {
+            if (city.getSize() <= 1) continue;              // small towns have no slots
+            if (state.getClosedCities().contains(city)) continue;
+            if (extensions.contains(city)) continue;        // expansion marker ≠ branch
+            PlayerColor[] slots = state.getCityBranches().get(city);
+            boolean hasExistingBranch = false;
+            boolean hasFreeSlot = false;
+            for (PlayerColor slot : slots) {
+                if (slot == player) hasExistingBranch = true;
+                if (slot == null) hasFreeSlot = true;
+            }
+            if (hasExistingBranch && hasFreeSlot) result.add(city);
+        }
+        return result;
+    }
 
     private Set<City> validExpansionTargets(GameState state, PlayerColor player) {
         Set<City> myCities = citiesWithPresence(state, player);
