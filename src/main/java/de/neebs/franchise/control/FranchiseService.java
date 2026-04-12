@@ -363,6 +363,21 @@ public class FranchiseService {
             }
         }
 
+        // Affordability check: income + current money (+ $10 if MONEY bonus) must cover all costs
+        int income = calcIncome(state, player);
+        int availableMoney = state.getScores().get(player).getMoney() + income
+                + (bonus == BonusTileUsage.MONEY ? 10 : 0);
+        int extensionCost = extensions.stream()
+                .mapToInt(t -> minExpansionCost(state, player, t).getAsInt())
+                .sum();
+        int increaseCost = (bonus == BonusTileUsage.INCREASE) ? 1 : increases.size();
+        if (availableMoney < extensionCost + increaseCost) {
+            throw new IllegalArgumentException(
+                    "Insufficient funds: need $" + (extensionCost + increaseCost)
+                    + " but only have $" + availableMoney + " (money + income"
+                    + (bonus == BonusTileUsage.MONEY ? " + $10 bonus" : "") + ")");
+        }
+
         // --- All validation passed; now mutate state ---
 
         Score score = state.getScores().get(player);
@@ -374,7 +389,6 @@ public class FranchiseService {
         }
 
         // Phase 1: Income
-        int income = calcIncome(state, player);
         score.setMoney(score.getMoney() + income);
         score.setIncome(income);
 

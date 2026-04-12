@@ -404,6 +404,28 @@ class FranchiseControllerTest {
     }
 
     @Test
+    void expand_insufficientFunds_returns400() throws Exception {
+        // 5-player game: all regions active, so CASPER (Montana) is available.
+        // RED (index 0) gets $3 starting money. CASPER → OKLAHOMA_CITY costs $5.
+        // Round 1: $3 + $1 income = $4 < $5 → must be rejected.
+        String gameId = createGame("RED", "BLUE", "WHITE", "ORANGE", "BLACK");
+        // Init order is reverse: BLACK → ORANGE → WHITE → BLUE → RED
+        performInitDraw(gameId, "BLACK", "INDIANAPOLIS");
+        performInitDraw(gameId, "ORANGE", "MEMPHIS");
+        performInitDraw(gameId, "WHITE", "LITTLE_ROCK");
+        performInitDraw(gameId, "BLUE", "HUNTSVILLE");
+        performInitDraw(gameId, "RED", "CASPER");
+        // RED goes first in round 1 with $3, income $1 = $4 available
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"RED","extension":["OKLAHOMA_CITY"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("Insufficient funds")));
+    }
+
+    @Test
     void expand_toOwnCity_returns400() throws Exception {
         // BLUE expands to CHARLOTTE in round 1; trying again in round 2 must return 400
         String gameId = createGame("RED", "BLUE");
