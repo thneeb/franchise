@@ -154,6 +154,10 @@ public class FranchiseService {
             throw new IllegalArgumentException("Only one city allowed during initialization");
         }
         City town = extensions.get(0);
+        if (town.getSize() != 1) {
+            throw new IllegalArgumentException(
+                    "Only small towns (size 1) are allowed during initialization");
+        }
         placeInSlot(state, town, 0, player);
         state.getSupply().merge(player, -1, Integer::sum);
 
