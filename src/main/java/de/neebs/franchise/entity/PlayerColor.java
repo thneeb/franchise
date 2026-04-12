@@ -1,5 +1,5 @@
 package de.neebs.franchise.entity;
 
 public enum PlayerColor {
-    BLACK, WHITE, ORANGE, BLUE, RED, NEUTRAL
+    BLACK, WHITE, ORANGE, BLUE, RED
 }

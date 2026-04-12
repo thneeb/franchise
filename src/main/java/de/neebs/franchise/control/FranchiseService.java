@@ -129,18 +129,28 @@ public class FranchiseService {
         List<Region> inactive = new ArrayList<>();
         if (players.size() <= 3) {
             inactive = List.of(Region.CALIFORNIA, Region.GRAND_CANYON, Region.MONTANA);
-            applyInactiveRegions(state, inactive);
+            PlayerColor neutralColor = findUnusedColor(players);
+            applyInactiveRegions(state, inactive, neutralColor);
         }
         state.setInactiveRegions(new ArrayList<>(inactive));
 
         return state;
     }
 
-    private void applyInactiveRegions(GameState state, List<Region> inactive) {
+    private PlayerColor findUnusedColor(List<PlayerColor> players) {
+        for (PlayerColor color : PlayerColor.values()) {
+            if (!players.contains(color)) {
+                return color;
+            }
+        }
+        throw new IllegalStateException("No unused player color available for inactive regions");
+    }
+
+    private void applyInactiveRegions(GameState state, List<Region> inactive, PlayerColor neutralColor) {
         for (Region region : inactive) {
             for (City city : region.getCities()) {
-                // Fill every slot with NEUTRAL — makes the city appear fully occupied
-                Arrays.fill(state.getCityBranches().get(city), PlayerColor.NEUTRAL);
+                // Fill every slot with an unused player color — makes the city appear fully occupied
+                Arrays.fill(state.getCityBranches().get(city), neutralColor);
                 // City tiles are removed: treat them as already scored
                 state.getClosedCities().add(city);
             }
