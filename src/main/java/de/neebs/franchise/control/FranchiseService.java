@@ -181,6 +181,10 @@ public class FranchiseService {
         if (draw.getBonusTileUsage() != null) {
             throw new IllegalArgumentException("Bonus tiles cannot be used during initialization");
         }
+        List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
+        if (!increases.isEmpty()) {
+            throw new IllegalArgumentException("Increases are not allowed during initialization");
+        }
         List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
         if (extensions.size() != 1) {
             throw new IllegalArgumentException("Only one city allowed during initialization");

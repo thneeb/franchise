@@ -222,6 +222,21 @@ class FranchiseControllerTest {
                         "Bonus tiles cannot be used during initialization"));
     }
 
+    @Test
+    void createDraw_initDraw_withIncrease_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        // BLUE tries to increase a city during init — not allowed
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","extension":["DALLAS"],"increase":["CHICAGO"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        containsString("Increases are not allowed during initialization")));
+    }
+
     // -------------------------------------------------------------------------
     // createDraw — transition to normal play
     // -------------------------------------------------------------------------
