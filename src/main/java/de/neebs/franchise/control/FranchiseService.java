@@ -144,14 +144,15 @@ public class FranchiseService {
             }
 
             // INCREASE bonus: double-increase in one city (needs ≥ 2 free slots, costs $1)
+            // Represented as increase:[city, city] to make both placements explicit
             Set<City> doubleIncreaseCities = validIncreaseCities(state, player, List.of(), 2);
             for (City inc : doubleIncreaseCities) {
                 if (availableMoney >= 1) {
-                    draws.add(draw(player, List.of(), List.of(inc), BonusTileUsage.INCREASE));
+                    draws.add(draw(player, List.of(), List.of(inc, inc), BonusTileUsage.INCREASE));
                     for (City ext : expansionTargets) {
                         int extCost = minExpansionCost(state, player, ext).getAsInt();
                         if (availableMoney >= extCost + 1) {
-                            draws.add(draw(player, List.of(ext), List.of(inc), BonusTileUsage.INCREASE));
+                            draws.add(draw(player, List.of(ext), List.of(inc, inc), BonusTileUsage.INCREASE));
                         }
                     }
                 }
@@ -338,11 +339,11 @@ public class FranchiseService {
             }
         }
 
-        // INCREASE bonus: double-increase in exactly one city (must have ≥ 2 free slots)
+        // INCREASE bonus: double-increase in one city — must be represented as [city, city]
         if (bonus == BonusTileUsage.INCREASE) {
-            if (increases.size() != 1) {
+            if (increases.size() != 2 || !increases.get(0).equals(increases.get(1))) {
                 throw new IllegalArgumentException(
-                        "INCREASE bonus tile requires exactly 1 city to double-increase in");
+                        "INCREASE bonus tile requires exactly 2 identical cities (e.g. [\"CITY\",\"CITY\"])");
             }
             Set<City> validDoubleIncreases = validIncreaseCities(state, player, extensions, 2);
             if (!validDoubleIncreases.contains(increases.get(0))) {

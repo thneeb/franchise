@@ -458,7 +458,7 @@ class FranchiseControllerTest {
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"playerType":"HUMAN","color":"BLUE","increase":["CHARLOTTE"],"bonusTileUsage":"INCREASE"}
+                                {"playerType":"HUMAN","color":"BLUE","increase":["CHARLOTTE","CHARLOTTE"],"bonusTileUsage":"INCREASE"}
                                 """))
                 .andExpect(status().isOk());
     }
@@ -477,7 +477,7 @@ class FranchiseControllerTest {
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"playerType":"HUMAN","color":"BLUE","increase":["PITTSBURGH"],"bonusTileUsage":"INCREASE"}
+                                {"playerType":"HUMAN","color":"BLUE","increase":["PITTSBURGH","PITTSBURGH"],"bonusTileUsage":"INCREASE"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(containsString("2 free slots")));
@@ -499,7 +499,7 @@ class FranchiseControllerTest {
                                 {"playerType":"HUMAN","color":"BLUE","bonusTileUsage":"INCREASE"}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value(containsString("exactly 1 city")));
+                .andExpect(jsonPath("$.detail").value(containsString("exactly 2 identical cities")));
     }
 
     @Test
