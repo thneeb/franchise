@@ -143,13 +143,16 @@ public class FranchiseService {
                 }
             }
 
-            // INCREASE bonus: first increase is free
-            for (City inc : increaseCities) {
-                draws.add(draw(player, List.of(), List.of(inc), BonusTileUsage.INCREASE));
-                for (City ext : expansionTargets) {
-                    int extCost = minExpansionCost(state, player, ext).getAsInt();
-                    if (availableMoney >= extCost) { // increase itself is free
-                        draws.add(draw(player, List.of(ext), List.of(inc), BonusTileUsage.INCREASE));
+            // INCREASE bonus: double-increase in one city (needs ≥ 2 free slots, costs $1)
+            Set<City> doubleIncreaseCities = validIncreaseCities(state, player, List.of(), 2);
+            for (City inc : doubleIncreaseCities) {
+                if (availableMoney >= 1) {
+                    draws.add(draw(player, List.of(), List.of(inc), BonusTileUsage.INCREASE));
+                    for (City ext : expansionTargets) {
+                        int extCost = minExpansionCost(state, player, ext).getAsInt();
+                        if (availableMoney >= extCost + 1) {
+                            draws.add(draw(player, List.of(ext), List.of(inc), BonusTileUsage.INCREASE));
+                        }
                     }
                 }
             }
@@ -329,14 +332,28 @@ public class FranchiseService {
             }
         }
 
-        // Can only increase in cities with a pre-existing branch,
-        // not in cities being expanded to this same turn (expansion marker ≠ branch)
-        Set<City> validIncreases = validIncreaseCities(state, player, extensions);
-        for (City city : increases) {
-            if (!validIncreases.contains(city)) {
+        // INCREASE bonus: double-increase in exactly one city (must have ≥ 2 free slots)
+        if (bonus == BonusTileUsage.INCREASE) {
+            if (increases.size() != 1) {
                 throw new IllegalArgumentException(
-                        "Cannot increase in " + city.getName()
-                        + ": no pre-existing branch there");
+                        "INCREASE bonus tile requires exactly 1 city to double-increase in");
+            }
+            Set<City> validDoubleIncreases = validIncreaseCities(state, player, extensions, 2);
+            if (!validDoubleIncreases.contains(increases.get(0))) {
+                throw new IllegalArgumentException(
+                        "Cannot double-increase in " + increases.get(0).getName()
+                        + ": need a pre-existing branch and at least 2 free slots");
+            }
+        } else {
+            // Can only increase in cities with a pre-existing branch,
+            // not in cities being expanded to this same turn (expansion marker ≠ branch)
+            Set<City> validIncreases = validIncreaseCities(state, player, extensions);
+            for (City city : increases) {
+                if (!validIncreases.contains(city)) {
+                    throw new IllegalArgumentException(
+                            "Cannot increase in " + city.getName()
+                            + ": no pre-existing branch there");
+                }
             }
         }
 
@@ -361,13 +378,16 @@ public class FranchiseService {
             score.setMoney(score.getMoney() - cost);
         }
 
-        // Phase 3: Pay $1 per increase (first is free with INCREASE bonus)
-        for (int i = 0; i < increases.size(); i++) {
-            boolean free = (i == 0) && (bonus == BonusTileUsage.INCREASE);
-            if (!free) {
+        // Phase 3: Pay for increases
+        if (bonus == BonusTileUsage.INCREASE) {
+            // Double-increase: pay $1 for first branch, second is free; use 2 supply
+            score.setMoney(score.getMoney() - 1);
+            state.getSupply().merge(player, -2, Integer::sum);
+        } else {
+            for (City city : increases) {
                 score.setMoney(score.getMoney() - 1);
+                state.getSupply().merge(player, -1, Integer::sum);
             }
-            state.getSupply().merge(player, -1, Integer::sum);
         }
 
         // Phase 4A: Place expansion branches clockwise
@@ -377,9 +397,15 @@ public class FranchiseService {
         }
 
         // Phase 4B: Place increase branches clockwise
-        for (City city : increases) {
-            placeNextClockwise(state, player, city, log);
-            // supply already decremented in Phase 3
+        if (bonus == BonusTileUsage.INCREASE && !increases.isEmpty()) {
+            // Double-increase: place 2 branches in the same city (supply already decremented)
+            placeNextClockwise(state, player, increases.get(0), log);
+            placeNextClockwise(state, player, increases.get(0), log);
+        } else {
+            for (City city : increases) {
+                placeNextClockwise(state, player, city, log);
+                // supply already decremented in Phase 3
+            }
         }
 
         // Phase 5: Region scoring
@@ -664,6 +690,11 @@ public class FranchiseService {
 
     private Set<City> validIncreaseCities(GameState state, PlayerColor player,
                                            List<City> extensions) {
+        return validIncreaseCities(state, player, extensions, 1);
+    }
+
+    private Set<City> validIncreaseCities(GameState state, PlayerColor player,
+                                           List<City> extensions, int minFreeSlots) {
         Set<City> result = new HashSet<>();
         for (City city : City.values()) {
             if (city.getSize() <= 1) continue;              // small towns have no slots
@@ -671,12 +702,12 @@ public class FranchiseService {
             if (extensions.contains(city)) continue;        // expansion marker ≠ branch
             PlayerColor[] slots = state.getCityBranches().get(city);
             boolean hasExistingBranch = false;
-            boolean hasFreeSlot = false;
+            int freeSlots = 0;
             for (PlayerColor slot : slots) {
                 if (slot == player) hasExistingBranch = true;
-                if (slot == null) hasFreeSlot = true;
+                if (slot == null) freeSlots++;
             }
-            if (hasExistingBranch && hasFreeSlot) result.add(city);
+            if (hasExistingBranch && freeSlots >= minFreeSlots) result.add(city);
         }
         return result;
     }

@@ -404,6 +404,64 @@ class FranchiseControllerTest {
     }
 
     @Test
+    void increase_doubleIncrease_withIncreaseBonusTile_succeeds() throws Exception {
+        // BLUE at INDIANAPOLIS → expands to CHARLOTTE (cost 0, size 3, 2 free slots after expansion)
+        // Then BLUE uses INCREASE bonus to double-increase in CHARLOTTE
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+        skipTurn(gameId, "RED");            // round 1
+        performExpand(gameId, "BLUE", "CHARLOTTE"); // round 2 — CHARLOTTE: 1 BLUE branch, 2 free
+        skipTurn(gameId, "RED");            // round 3
+        // BLUE on round 4 → bonus eligible; CHARLOTTE has 2 free slots
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","increase":["CHARLOTTE"],"bonusTileUsage":"INCREASE"}
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void increase_doubleIncrease_onlyOneFreeSlot_returns400() throws Exception {
+        // BLUE at INDIANAPOLIS → expands to PITTSBURGH (size 2, 1 free slot after expansion)
+        // INCREASE bonus requires ≥ 2 free slots → must return 400
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+        skipTurn(gameId, "RED");            // round 1
+        performExpand(gameId, "BLUE", "PITTSBURGH"); // round 2 — PITTSBURGH: 1 BLUE, 1 free
+        skipTurn(gameId, "RED");            // round 3
+        // BLUE on round 4 — PITTSBURGH has only 1 free slot
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","increase":["PITTSBURGH"],"bonusTileUsage":"INCREASE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("2 free slots")));
+    }
+
+    @Test
+    void increase_doubleIncrease_withWrongCityCount_returns400() throws Exception {
+        // INCREASE bonus requires exactly 1 city; 0 or 2+ must return 400
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+        skipTurn(gameId, "RED");
+        skipTurn(gameId, "BLUE");
+        skipTurn(gameId, "RED"); // BLUE on round 4 — bonus eligible
+        // 0 cities
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","bonusTileUsage":"INCREASE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("exactly 1 city")));
+    }
+
+    @Test
     void useBonusTile_onFirstTurn_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
         performInitDraw(gameId, "BLUE", "LAS_VEGAS");
@@ -494,6 +552,15 @@ class FranchiseControllerTest {
                         .content("""
                                 {"playerType":"HUMAN","color":"%s"}
                                 """.formatted(color)))
+                .andExpect(status().isOk());
+    }
+
+    private void performExpand(String gameId, String color, String city) throws Exception {
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"%s","extension":["%s"]}
+                                """.formatted(color, city)))
                 .andExpect(status().isOk());
     }
 
