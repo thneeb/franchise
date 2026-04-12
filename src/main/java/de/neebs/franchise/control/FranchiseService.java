@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.OptionalInt;
 
 @Service
 public class FranchiseService {
@@ -222,7 +223,7 @@ public class FranchiseService {
         // --- Validate everything before mutating state ---
 
         if (bonus != null) {
-            if (state.getRound() <= 1) {
+            if (state.getRound() <= state.getPlayers().size()) {
                 throw new IllegalArgumentException("Bonus tiles cannot be used on the first turn");
             }
             if (state.getScores().get(player).getBonusTiles() <= 0) {
@@ -244,6 +245,14 @@ public class FranchiseService {
         }
         if (extensions.size() == 2 && extensions.get(0).equals(extensions.get(1))) {
             throw new IllegalArgumentException("Cannot expand to the same city twice");
+        }
+
+        // Each extension target must be directly reachable from an occupied city
+        for (City target : extensions) {
+            if (minExpansionCost(state, player, target).isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Cannot reach " + target.getName() + " from any occupied city");
+            }
         }
 
         // Can only increase in cities with a pre-existing branch,
@@ -274,7 +283,7 @@ public class FranchiseService {
 
         // Phase 2: Pay expansion route costs
         for (City target : extensions) {
-            int cost = minExpansionCost(state, player, target);
+            int cost = minExpansionCost(state, player, target).getAsInt();
             score.setMoney(score.getMoney() - cost);
         }
 
@@ -627,15 +636,14 @@ public class FranchiseService {
         return !hasPresence && hasFree;
     }
 
-    private int minExpansionCost(GameState state, PlayerColor player, City target) {
+    private OptionalInt minExpansionCost(GameState state, PlayerColor player, City target) {
         Set<City> myCities = citiesWithPresence(state, player);
         return Rules.CONNECTIONS.stream()
                 .filter(c -> c.cities().contains(target))
                 .filter(c -> c.cities().stream().anyMatch(
                         city -> city != target && myCities.contains(city)))
                 .mapToInt(Connection::cost)
-                .min()
-                .orElse(0);
+                .min();
     }
 
     public Map<City, Integer> computeExpansionCosts(String gameId) {
@@ -644,14 +652,13 @@ public class FranchiseService {
         Set<City> myCities = citiesWithPresence(state, player);
         Map<City, Integer> costs = new EnumMap<>(City.class);
         for (City city : City.values()) {
-            int cost = Rules.CONNECTIONS.stream()
+            OptionalInt cost = Rules.CONNECTIONS.stream()
                     .filter(c -> c.cities().contains(city))
                     .filter(c -> c.cities().stream().anyMatch(
                             other -> other != city && myCities.contains(other)))
                     .mapToInt(Connection::cost)
-                    .min()
-                    .orElse(0);
-            costs.put(city, cost);
+                    .min();
+            costs.put(city, cost.orElse(-1));
         }
         return costs;
     }

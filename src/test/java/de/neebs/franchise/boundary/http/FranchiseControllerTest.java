@@ -328,9 +328,11 @@ class FranchiseControllerTest {
         String gameId = createGame("RED", "BLUE");
         performInitDraw(gameId, "BLUE", "LAS_VEGAS");
         performInitDraw(gameId, "RED", "RENO");
-        skipTurn(gameId, "RED"); // advance past round 1
+        skipTurn(gameId, "RED");  // round 1 (RED's first turn)
+        skipTurn(gameId, "BLUE"); // round 2 (BLUE's first turn)
+        skipTurn(gameId, "RED");  // round 3
 
-        // BLUE on round 2 — uses EXTENSION bonus but only provides 1 city → rejected
+        // BLUE on round 4 — uses EXTENSION bonus but only provides 1 city → rejected
         int tilesBefore = objectMapper.readTree(
                 mockMvc.perform(get("/franchise/{gameId}", gameId))
                         .andReturn().getResponse().getContentAsString())
@@ -357,9 +359,11 @@ class FranchiseControllerTest {
         String gameId = createGame("RED", "BLUE");
         performInitDraw(gameId, "BLUE", "LAS_VEGAS");
         performInitDraw(gameId, "RED", "RENO");
-        skipTurn(gameId, "RED"); // advance past round 1
+        skipTurn(gameId, "RED");  // round 1 (RED's first turn)
+        skipTurn(gameId, "BLUE"); // round 2 (BLUE's first turn)
+        skipTurn(gameId, "RED");  // round 3
 
-        // BLUE on round 2 — try to expand to same city twice with EXTENSION bonus
+        // BLUE on round 4 — try to expand to same city twice with EXTENSION bonus
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -377,23 +381,26 @@ class FranchiseControllerTest {
         String gameId = createGame("RED", "BLUE");
         performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
         performInitDraw(gameId, "RED", "MEMPHIS");
-        skipTurn(gameId, "RED"); // advance past round 1
+        skipTurn(gameId, "RED");  // round 1 (RED's first turn)
+        skipTurn(gameId, "BLUE"); // round 2 (BLUE's first turn)
+        skipTurn(gameId, "RED");  // round 3
 
-        // BLUE on round 2 — expand to 2 different active cities with EXTENSION bonus
+        // BLUE on round 4 — expand to 2 cities directly connected to INDIANAPOLIS
+        // CHARLOTTE (cost 0) and DETROIT (cost 1) are both direct neighbours
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"playerType":"HUMAN","color":"BLUE",
                                  "bonusTileUsage":"EXTENSION",
-                                 "extension":["RALEIGH","HUNTSVILLE"]}
+                                 "extension":["CHARLOTTE","DETROIT"]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.extension", hasSize(2)));
 
         // Both cities should now have BLUE's branch
         mockMvc.perform(get("/franchise/{gameId}", gameId))
-                .andExpect(jsonPath("$.cities[?(@.city=='RALEIGH')].branches[0]").value("BLUE"))
-                .andExpect(jsonPath("$.cities[?(@.city=='HUNTSVILLE')].branches[0]").value("BLUE"));
+                .andExpect(jsonPath("$.cities[?(@.city=='CHARLOTTE')].branches[0]").value("BLUE"))
+                .andExpect(jsonPath("$.cities[?(@.city=='DETROIT')].branches[0]").value("BLUE"));
     }
 
     @Test
@@ -407,6 +414,18 @@ class FranchiseControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"playerType":"HUMAN","color":"RED","bonusTileUsage":"MONEY"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        "Bonus tiles cannot be used on the first turn"));
+
+        skipTurn(gameId, "RED"); // round 1 — advance without bonus
+
+        // BLUE on round 2 — also first turn, bonus tiles still forbidden
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","bonusTileUsage":"MONEY"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(
