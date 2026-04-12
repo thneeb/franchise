@@ -49,7 +49,7 @@ Set in 1960s America during the franchise boom. Players are franchise entreprene
 
 > All money must remain visible to all players at all times.
 
-**2- or 3-player adjustment:** Three regions are inactive. Remove their city tiles, place a non-player-colored branch on every small town and city in those three regions, and place the three corresponding region tiles face-down on the first three spaces of the region track.
+**2- or 3-player adjustment:** Three fixed regions are inactive: **California**, **Grand Canyon**, and **Montana**. Remove their city tiles, place a non-player-colored branch on every small town and city in those three regions, and place the three corresponding region tiles face-down on the first three spaces of the region track.
 
 **First game / new player recommendation:** Start with two branches per player instead of one, placed at the predefined starting locations listed in the rulebook.
 
@@ -65,7 +65,20 @@ Each player, on their turn, executes the following **5 phases in order**:
 
 Count all **unoccupied spaces** in every city where you have **at least one branch**. Look up that total on your income table and take that amount from the bank.
 
-> If you are not present in any scored city, you receive $1.
+> Small towns (single-space locations) are **not** counted for income. If you have no presence in any multi-space city, you receive $1.
+
+**Income tables (free unoccupied slots → income):**
+
+| Free slots | Income |   | Free slots | Income |   | Free slots | Income |   | Free slots | Income |
+|-----------|--------|---|-----------|--------|---|-----------|--------|---|-----------|--------|
+| **2 players** |   |   | **3 players** |   |   | **4 players** |   |   | **5 players** |   |
+| 0–3       | $1     |   | 0–2       | $1     |   | 0–1       | $1     |   | 0–1       | $1     |
+| 4–10      | $2     |   | 3–6       | $2     |   | 2–5       | $2     |   | 2–4       | $2     |
+| 11–16     | $3     |   | 7–10      | $3     |   | 6–9       | $3     |   | 5–8       | $3     |
+| 17–22     | $4     |   | 11–14     | $4     |   | 10–13     | $4     |   | 9–12      | $4     |
+| 23–30     | $5     |   | 15–20     | $5     |   | 14–17     | $5     |   | 13–15     | $5     |
+| 31–39     | $6     |   | 21–26     | $6     |   | 18–21     | $6     |   | 16–18     | $6     |
+| 40+       | $7     |   | 27+       | $7     |   | 22+       | $7     |   | 19+       | $7     |
 
 ---
 
@@ -80,6 +93,8 @@ Pay the route cost to the bank. You may skip expansion entirely.
 
 > You cannot skip over intermediate cities or small towns — you must always move to an adjacent location.
 
+> **Expansion vs. increase:** You can never expand (Phase 2) to a city where you already have a branch — that is only possible via **increase** (Phase 3). Even with the Double Expansion bonus tile, both target cities must be ones where you have no existing branch.
+
 ---
 
 ### Phase 3: Increase Market Share in Cities
@@ -89,7 +104,11 @@ For each city where you have **at least one branch** and **at least one unoccupi
 - **a)** Do nothing, OR
 - **b)** Pay $1 to the bank and place one additional branch in the **center** of that city.
 
-You may place at most **one additional branch per city per turn**.
+You may place at most **one additional branch per city per turn**. You may increase in **multiple different cities** in the same turn (each costs $1).
+
+> **Combined turns:** Phases 2 and 3 happen in the same turn. You may expand to a new city (Phase 2) **and** increase market share in other cities (Phase 3) in one turn. However, a city you expanded to this turn cannot also be used for an increase — your expansion marker (not yet replaced by a branch) does not count as an existing branch.
+
+> **Affordability:** You must be able to pay all costs from your current money plus income earned that turn. The total cost is: sum of route costs (Phase 2) + $1 per increase (Phase 3). You may never go into debt.
 
 ---
 
@@ -120,12 +139,14 @@ For each such city, in any order:
 
 #### City Scoring
 
+The influence value of a city equals its **number of spaces** (e.g., a 4-space city scores 4 influence points).
+
 When a city scoring is triggered, one of two cases applies:
 
 **Case A — Absolute majority:** The active player holds more than half the spaces.
-→ That player gains influence points equal to the number shown in the center of the city tile.
+→ That player gains influence points equal to the city's number of spaces.
 
-**Case B — No absolute majority (all spaces filled, no majority):** The player with the **most branches** in the city gains **half** of that center number (rounded down).
+**Case B — No absolute majority (all spaces filled, no majority):** The player with the **most branches** in the city gains **half** of the city's space count (rounded down).
 → **Tie-break:** The tied player whose branch occupies the branch-symbol space wins. If multiple tied players are involved, the one who placed first (earliest clockwise position) wins.
 
 **After scoring:**
@@ -152,9 +173,32 @@ Distribute influence points according to the region tile:
 
 > **2-player exception:** The second-highest value is skipped; the second-place player receives the third-highest value.
 
+**Region scoring values (1st / 2nd / 3rd):**
+
+| Region        | 1st | 2nd | 3rd |
+|---------------|-----|-----|-----|
+| California    | 6   | 4   | 2   |
+| Grand Canyon  | 10  | 8   | 5   |
+| Upper West    | 7   | 6   | 1   |
+| Montana       | 8   | 5   | 4   |
+| Great Lakes   | 6   | 4   | 2   |
+| New York      | 6   | 5   | 4   |
+| Washington    | 5   | 3   | 2   |
+| Florida       | 10  | 6   | 3   |
+| Central       | 4   | 3   | 1   |
+| Texas         | 5   | 4   | 2   |
+
 **Tie-break:** The player whose branch stands next to the region tile wins the tie. If that player is not among the tied players, the tied player who is closest **clockwise** to them wins.
 
 After the region scoring, place the region tile on the **leftmost free space** of the region track. The active player (who triggered the scoring) receives the influence points printed on that space.
+
+**Region track influence bonuses** (left to right, positions 1–10):
+
+| Position | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9* | 10* |
+|----------|---|---|---|---|---|---|---|---|----|-----|
+| Influence| 3 | 3 | 2 | 2 | 3 | 4 | 3 | 2 | 0  | 0   |
+
+> *Positions 9 and 10 are the **red zone**: once any region tile reaches the red zone, the game ends after the current player finishes their turn.
 
 > Multiple region scorings in one turn are handled in any order.
 

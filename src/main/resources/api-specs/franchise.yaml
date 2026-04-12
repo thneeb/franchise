@@ -17,6 +17,11 @@ paths:
       responses:
         '201':
           description: Returns the actual game field for the given id
+          headers:
+            Location:
+              description: URL of the newly created game
+              schema:
+                type: string
           content:
             'application/json':
               schema:
@@ -143,6 +148,8 @@ components:
                 type: string
     GameField:
       properties:
+        id:
+          type: string
         end:
           type: boolean
         initialization:
@@ -166,6 +173,10 @@ components:
           items:
             $ref: '#/components/schemas/PlayerRegion'
         closedRegions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Region'
+        inactiveRegions:
           type: array
           items:
             $ref: '#/components/schemas/Region'
