@@ -6,6 +6,7 @@ import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.DrawResult;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.Score;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,7 +31,10 @@ public class FranchiseController implements FranchiseApi {
                 .map(p -> de.neebs.franchise.entity.PlayerColor.valueOf(p.name()))
                 .collect(Collectors.toList());
         GameState state = franchiseService.initGame(players);
-        return ResponseEntity.status(HttpStatus.CREATED).body(toGameField(state));
+        GameField gameField = toGameField(state);
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.LOCATION, "/franchise/" + state.getId());
+        return ResponseEntity.status(HttpStatus.CREATED).headers(headers).body(gameField);
     }
 
     @Override
@@ -118,6 +122,7 @@ public class FranchiseController implements FranchiseApi {
                 .collect(Collectors.toList());
 
         return new GameField()
+                .id(state.getId())
                 .end(state.isEnd())
                 .initialization(state.isInitialization())
                 .bonusTileUsable(bonusTileUsable)
