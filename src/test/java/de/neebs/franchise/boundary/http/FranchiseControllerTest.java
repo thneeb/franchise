@@ -147,6 +147,36 @@ class FranchiseControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void createDraw_initDraw_twoCities_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        // BLUE tries to place two cities during init — only 1 allowed
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","extension":["DALLAS","MEMPHIS"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        containsString("Only one city allowed during initialization")));
+    }
+
+    @Test
+    void createDraw_initDraw_withBonusTile_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        // BLUE tries to use a bonus tile during init — not allowed
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"BLUE","extension":["DALLAS"],"bonusTileUsage":"MONEY"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        "Bonus tiles cannot be used during initialization"));
+    }
+
     // -------------------------------------------------------------------------
     // createDraw — transition to normal play
     // -------------------------------------------------------------------------

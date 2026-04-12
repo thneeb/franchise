@@ -146,7 +146,14 @@ public class FranchiseService {
     // -------------------------------------------------------------------------
 
     private int applyInitDraw(GameState state, PlayerColor player, DrawRecord draw) {
-        City town = draw.getExtension().get(0);
+        if (draw.getBonusTileUsage() != null) {
+            throw new IllegalArgumentException("Bonus tiles cannot be used during initialization");
+        }
+        List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
+        if (extensions.size() != 1) {
+            throw new IllegalArgumentException("Only one city allowed during initialization");
+        }
+        City town = extensions.get(0);
         placeInSlot(state, town, 0, player);
         state.getSupply().merge(player, -1, Integer::sum);
 
