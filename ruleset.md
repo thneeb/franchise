@@ -102,7 +102,11 @@ For each city where you have **at least one branch** and **at least one unoccupi
 - **a)** Do nothing, OR
 - **b)** Pay $1 to the bank and place one additional branch in the **center** of that city.
 
-You may place at most **one additional branch per city per turn**.
+You may place at most **one additional branch per city per turn**. You may increase in **multiple different cities** in the same turn (each costs $1).
+
+> **Combined turns:** Phases 2 and 3 happen in the same turn. You may expand to a new city (Phase 2) **and** increase market share in other cities (Phase 3) in one turn. However, a city you expanded to this turn cannot also be used for an increase — your expansion marker (not yet replaced by a branch) does not count as an existing branch.
+
+> **Affordability:** You must be able to pay all costs from your current money plus income earned that turn. The total cost is: sum of route costs (Phase 2) + $1 per increase (Phase 3). You may never go into debt.
 
 ---
 

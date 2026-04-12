@@ -68,17 +68,91 @@ public class FranchiseService {
             return draws;
         }
 
-        // No-expansion draw
+        Score score = state.getScores().get(player);
+        int income = calcIncome(state, player);
+        int availableMoney = score.getMoney() + income;
+        boolean bonusEligible = state.getRound() > state.getPlayers().size()
+                && score.getBonusTiles() > 0;
+
+        Set<City> expansionTargets = validExpansionTargets(state, player);
+        Set<City> increaseCities = validIncreaseCities(state, player, List.of());
+
+        // --- No bonus tile ---
+
+        // Skip (always available)
         draws.add(draw(player, List.of(), List.of(), null));
 
-        // Valid expansion targets
-        for (City target : validExpansionTargets(state, player)) {
-            draws.add(draw(player, List.of(target), List.of(), null));
+        // Single extension (+ optional single increase)
+        for (City ext : expansionTargets) {
+            int extCost = minExpansionCost(state, player, ext).getAsInt();
+            if (availableMoney >= extCost) {
+                draws.add(draw(player, List.of(ext), List.of(), null));
+                for (City inc : validIncreaseCities(state, player, List.of(ext))) {
+                    if (availableMoney >= extCost + 1) {
+                        draws.add(draw(player, List.of(ext), List.of(inc), null));
+                    }
+                }
+            }
         }
 
-        // Valid increase targets (pre-existing branch required; expansion marker doesn't count)
-        for (City target : validIncreaseCities(state, player, List.of())) {
-            draws.add(draw(player, List.of(), List.of(target), null));
+        // Single increase only
+        for (City inc : increaseCities) {
+            if (availableMoney >= 1) {
+                draws.add(draw(player, List.of(), List.of(inc), null));
+            }
+        }
+
+        // --- Bonus tile draws ---
+        if (bonusEligible) {
+            // MONEY bonus: take $10, then optionally expand/increase
+            int moneyAvailable = availableMoney + 10;
+            draws.add(draw(player, List.of(), List.of(), BonusTileUsage.MONEY));
+            for (City ext : expansionTargets) {
+                int extCost = minExpansionCost(state, player, ext).getAsInt();
+                if (moneyAvailable >= extCost) {
+                    draws.add(draw(player, List.of(ext), List.of(), BonusTileUsage.MONEY));
+                    for (City inc : validIncreaseCities(state, player, List.of(ext))) {
+                        if (moneyAvailable >= extCost + 1) {
+                            draws.add(draw(player, List.of(ext), List.of(inc), BonusTileUsage.MONEY));
+                        }
+                    }
+                }
+            }
+            for (City inc : increaseCities) {
+                if (moneyAvailable >= 1) {
+                    draws.add(draw(player, List.of(), List.of(inc), BonusTileUsage.MONEY));
+                }
+            }
+
+            // EXTENSION bonus: expand to exactly 2 cities
+            List<City> extList = new ArrayList<>(expansionTargets);
+            for (int i = 0; i < extList.size(); i++) {
+                for (int j = i + 1; j < extList.size(); j++) {
+                    City ext1 = extList.get(i);
+                    City ext2 = extList.get(j);
+                    int cost1 = minExpansionCost(state, player, ext1).getAsInt();
+                    int cost2 = minExpansionCost(state, player, ext2).getAsInt();
+                    if (availableMoney >= cost1 + cost2) {
+                        draws.add(draw(player, List.of(ext1, ext2), List.of(), BonusTileUsage.EXTENSION));
+                        for (City inc : validIncreaseCities(state, player, List.of(ext1, ext2))) {
+                            if (availableMoney >= cost1 + cost2 + 1) {
+                                draws.add(draw(player, List.of(ext1, ext2), List.of(inc), BonusTileUsage.EXTENSION));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // INCREASE bonus: first increase is free
+            for (City inc : increaseCities) {
+                draws.add(draw(player, List.of(), List.of(inc), BonusTileUsage.INCREASE));
+                for (City ext : expansionTargets) {
+                    int extCost = minExpansionCost(state, player, ext).getAsInt();
+                    if (availableMoney >= extCost) { // increase itself is free
+                        draws.add(draw(player, List.of(ext), List.of(inc), BonusTileUsage.INCREASE));
+                    }
+                }
+            }
         }
 
         return draws;
