@@ -470,13 +470,10 @@ public class FranchiseService {
         state.setRegionTrackIndex(0);
         state.setDrawHistory(new ArrayList<>());
 
-        // 2- or 3-player adjustment: four fixed regions are inactive.
-        // UPPER_WEST is also inactive because all its external connections lead into
-        // CALIFORNIA, GRAND_CANYON, or MONTANA — it forms an isolated island when those
-        // three are deactivated.
+        // 2- or 3-player adjustment: three fixed regions are inactive.
         List<Region> inactive = new ArrayList<>();
         if (players.size() <= 3) {
-            inactive = List.of(Region.CALIFORNIA, Region.GRAND_CANYON, Region.MONTANA, Region.UPPER_WEST);
+            inactive = List.of(Region.CALIFORNIA, Region.MONTANA, Region.UPPER_WEST);
             PlayerColor neutralColor = findUnusedColor(players);
             applyInactiveRegions(state, inactive, neutralColor);
         }

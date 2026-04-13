@@ -93,30 +93,24 @@ class FranchiseControllerTest {
 
     @Test
     void evaluateNextPossibleDraws_twoPlayerGame_excludesInactiveRegions() throws Exception {
-        // 2-player games deactivate CALIFORNIA, GRAND_CANYON, MONTANA, UPPER_WEST.
-        // UPPER_WEST is also inactive because all its external connections lead into the
-        // other three inactive regions, making it an isolated island.
-        // Small towns blocked: LAS_VEGAS, RENO (CA=2), FLAGSTAFF, PUEBLO, SALT_LAKE_CITY (GC=3),
-        //                      SPOKANE, BOISE, POCATELLO (UW=3), CONRAD, BILLINGS, CASPER, FARGO,
-        //                      SIOUX_FALLS (MT=5) — 13 towns blocked.
-        // 22 total small towns − 13 blocked = 9 available.
+        // 2-player games deactivate CALIFORNIA, MONTANA, UPPER_WEST.
+        // Small towns blocked: LAS_VEGAS, RENO (CA=2), SPOKANE, BOISE, POCATELLO (UW=3),
+        //                      CONRAD, BILLINGS, CASPER, FARGO, SIOUX_FALLS (MT=5) — 10 blocked.
+        // 22 total small towns − 10 blocked = 12 available.
         String gameId = createGame("RED", "BLUE");
 
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.inactiveRegions", hasSize(4)))
+                .andExpect(jsonPath("$.inactiveRegions", hasSize(3)))
                 .andExpect(jsonPath("$.inactiveRegions", containsInAnyOrder(
-                        "CALIFORNIA", "GRAND_CANYON", "MONTANA", "UPPER_WEST")));
+                        "CALIFORNIA", "MONTANA", "UPPER_WEST")));
 
         mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(9)))
+                .andExpect(jsonPath("$", hasSize(12)))
                 // None of the inactive-region small towns may appear
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("LAS_VEGAS"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("RENO"))))
-                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("FLAGSTAFF"))))
-                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("PUEBLO"))))
-                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("SALT_LAKE_CITY"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("SPOKANE"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("BOISE"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("POCATELLO"))))
