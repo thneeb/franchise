@@ -81,7 +81,12 @@ public class FranchiseService {
         if (state.isInitialization()) {
             for (City town : City.getTowns()) {
                 if (state.getCityBranches().get(town)[0] == null) {
-                    draws.add(draw(player, List.of(town), List.of(), null));
+                    // Only offer towns that have at least one reachable non-closed expansion target.
+                    // This prevents placing in inactive-region towns or geographically isolated starts.
+                    Set<City> targets = validExpansionTargetsFrom(state, player, Set.of(town));
+                    if (!targets.isEmpty()) {
+                        draws.add(draw(player, List.of(town), List.of(), null));
+                    }
                 }
             }
             return draws;
@@ -533,6 +538,15 @@ public class FranchiseService {
         if (town.getSize() != 1) {
             throw new IllegalArgumentException(
                     "Only small towns (size 1) are allowed during initialization");
+        }
+        if (state.getClosedCities().contains(town)) {
+            throw new IllegalArgumentException(
+                    "Cannot initialize in " + town.getName() + ": city is in an inactive region");
+        }
+        if (validExpansionTargetsFrom(state, player, Set.of(town)).isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Cannot initialize in " + town.getName()
+                    + ": no reachable expansion targets from this starting position");
         }
         placeInSlot(state, town, 0, player);
         state.getSupply().merge(player, -1, Integer::sum);

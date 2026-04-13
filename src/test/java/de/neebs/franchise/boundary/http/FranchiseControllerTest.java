@@ -139,16 +139,16 @@ class FranchiseControllerTest {
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"playerType":"HUMAN","color":"BLUE","extension":["LAS_VEGAS"]}
+                                {"playerType":"HUMAN","color":"BLUE","extension":["INDIANAPOLIS"]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.color").value("BLUE"))
-                .andExpect(jsonPath("$.draw.extension[0]").value("LAS_VEGAS"));
+                .andExpect(jsonPath("$.draw.extension[0]").value("INDIANAPOLIS"));
 
         // After BLUE's init draw, RED is next
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(jsonPath("$.next").value("RED"))
-                .andExpect(jsonPath("$.cities[?(@.city=='LAS_VEGAS')].branches[0]").value("BLUE"));
+                .andExpect(jsonPath("$.cities[?(@.city=='INDIANAPOLIS')].branches[0]").value("BLUE"));
     }
 
     @Test
@@ -246,8 +246,8 @@ class FranchiseControllerTest {
         String gameId = createGame("RED", "BLUE");
 
         // Init phase: BLUE then RED
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(jsonPath("$.initialization").value(false))
@@ -262,12 +262,12 @@ class FranchiseControllerTest {
     @Test
     void retrieveDraw_returnsDrawAtIndex() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
 
         mockMvc.perform(get("/franchise/{gameId}/draws/{index}", gameId, 0))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.color").value("BLUE"))
-                .andExpect(jsonPath("$.extension[0]").value("LAS_VEGAS"));
+                .andExpect(jsonPath("$.extension[0]").value("INDIANAPOLIS"));
     }
 
     @Test
@@ -308,8 +308,8 @@ class FranchiseControllerTest {
     @Test
     void expand_twoCity_withoutBonusTile_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         // RED is first (round 1) — try to expand to 2 cities without bonus tile
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
@@ -505,8 +505,8 @@ class FranchiseControllerTest {
     @Test
     void useBonusTile_onFirstTurn_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         // RED on round 1 — bonus tiles forbidden on first turn
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
