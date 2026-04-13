@@ -568,10 +568,12 @@ class FranchiseControllerTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void gameEnds_whenSevenRegionTilesAreOnTrack() throws Exception {
-        // Rule: game ends immediately after any player's turn once 7 region tiles
-        // are on the track (3 inactive pre-placed + 4 active scored in a 2-player game).
-        // We verify the boundary: regionTrackIndex=6 → game continues; =7 → game ends.
+    void gameEnds_whenRegionTileReachesRedZone() throws Exception {
+        // Rule: red zone = positions 8, 9, 10 on the region track.
+        // Game ends after the current player's turn once any tile reaches position 8+.
+        // regionTrackIndex is incremented after each tile is placed, so the check
+        // fires when regionTrackIndex >= 8.
+        // We verify the boundary: regionTrackIndex=7 → game continues; =8 → game ends.
         String gameId = createGame("RED", "BLUE");
         performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
         performInitDraw(gameId, "RED", "MEMPHIS");
@@ -579,17 +581,17 @@ class FranchiseControllerTest {
         // Both players can still expand from their starting towns, so the
         // consecutive-skip end condition will not fire (counter stays at 0).
 
-        // Simulate 6 tiles on the track — one short of the end condition
+        // Simulate 7 tiles on the track (just below the red zone threshold)
         de.neebs.franchise.entity.GameState state = franchiseService.getGame(gameId);
-        state.setRegionTrackIndex(6);
+        state.setRegionTrackIndex(7);
 
         skipTurn(gameId, "RED");
 
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(jsonPath("$.end").value(false));
 
-        // Simulate the 7th tile arriving on the track — game must end now
-        state.setRegionTrackIndex(7);
+        // Simulate the 8th tile reaching position 8 (red zone) — game must end
+        state.setRegionTrackIndex(8);
 
         skipTurn(gameId, "BLUE");
 

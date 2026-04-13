@@ -12,7 +12,7 @@ import java.util.OptionalInt;
 public class FranchiseService {
 
     private static final int INITIAL_SUPPLY = 40;
-    private static final int RED_ZONE_INDEX = 7; // game ends when 7 region tiles are on the track (regionTrackIndex reaches 7)
+    private static final int RED_ZONE_INDEX = 8; // red zone = positions 8-10 (1-indexed); game ends when 1st tile reaches position 8, i.e. regionTrackIndex reaches 8
 
     private final Map<String, GameState> games = new ConcurrentHashMap<>();
 
