@@ -262,6 +262,7 @@ components:
         - COMPUTER
     ComputerStrategy:
       enum:
+        - RANDOM
         - MONTE_CARLO_TREE_SEARCH
         - MAXIMAX
         - MINIMAX
