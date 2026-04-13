@@ -20,6 +20,7 @@ public class GameState {
     private int regionTrackIndex;
     private List<Region> inactiveRegions;
     private List<DrawRecord> drawHistory;
+    private int consecutiveSkipsWithoutExpansion;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -66,6 +67,11 @@ public class GameState {
     public List<DrawRecord> getDrawHistory() { return drawHistory; }
     public void setDrawHistory(List<DrawRecord> drawHistory) { this.drawHistory = drawHistory; }
 
+    public int getConsecutiveSkipsWithoutExpansion() { return consecutiveSkipsWithoutExpansion; }
+    public void setConsecutiveSkipsWithoutExpansion(int consecutiveSkipsWithoutExpansion) {
+        this.consecutiveSkipsWithoutExpansion = consecutiveSkipsWithoutExpansion;
+    }
+
     public GameState deepCopy() {
         GameState copy = new GameState();
         copy.id = this.id;
@@ -74,6 +80,7 @@ public class GameState {
         copy.round = this.round;
         copy.currentPlayerIndex = this.currentPlayerIndex;
         copy.regionTrackIndex = this.regionTrackIndex;
+        copy.consecutiveSkipsWithoutExpansion = this.consecutiveSkipsWithoutExpansion;
         copy.players = new ArrayList<>(this.players);
         copy.inactiveRegions = new ArrayList<>(this.inactiveRegions);
         copy.closedRegions = new ArrayList<>(this.closedRegions);

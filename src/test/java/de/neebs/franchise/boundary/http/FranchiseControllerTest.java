@@ -326,8 +326,8 @@ class FranchiseControllerTest {
     @Test
     void expand_extensionBonus_withOneCity_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
         skipTurn(gameId, "RED");  // round 1 (RED's first turn)
         skipTurn(gameId, "BLUE"); // round 2 (BLUE's first turn)
         skipTurn(gameId, "RED");  // round 3
@@ -357,8 +357,8 @@ class FranchiseControllerTest {
     @Test
     void expand_sameCityTwice_withExtensionBonus_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
         skipTurn(gameId, "RED");  // round 1 (RED's first turn)
         skipTurn(gameId, "BLUE"); // round 2 (BLUE's first turn)
         skipTurn(gameId, "RED");  // round 3
@@ -369,7 +369,7 @@ class FranchiseControllerTest {
                         .content("""
                                 {"playerType":"HUMAN","color":"BLUE",
                                  "bonusTileUsage":"EXTENSION",
-                                 "extension":["FLAGSTAFF","FLAGSTAFF"]}
+                                 "extension":["CHARLOTTE","CHARLOTTE"]}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(
@@ -534,8 +534,8 @@ class FranchiseControllerTest {
     @Test
     void useBonusTile_withNoneRemaining_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         // Exhaust all 4 of RED's bonus tiles (2-player game gives 4 tiles each)
         // RED plays on odd rounds: 1(skip), 3, 5, 7, 9 → uses bonus on rounds 3,5,7,9

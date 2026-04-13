@@ -302,6 +302,7 @@ public class FranchiseService {
 
         int income = calcIncome(state, player);
         Score score = state.getScores().get(player);
+        int availableMoney = score.getMoney() + income; // before bonus — used for skip-end check
 
         if (bonus != null) {
             score.setBonusTiles(score.getBonusTiles() - 1);
@@ -351,10 +352,15 @@ public class FranchiseService {
         // Phase 5: Region scoring
         checkAllRegions(state, player, log);
 
-        // Game end check
+        // Game end check (region track reached red zone)
         if (state.getRegionTrackIndex() >= RED_ZONE_INDEX + 1) {
             doFinalScoring(state);
             state.setEnd(true);
+        }
+
+        // Game end check (all players unable to expand consecutively)
+        if (!state.isEnd()) {
+            updateConsecutiveSkipCounter(state, player, extensions, availableMoney);
         }
 
         // Advance turn
@@ -621,8 +627,9 @@ public class FranchiseService {
 
         // Affordability check: income + current money (+ $10 if MONEY bonus) must cover all costs
         int income = calcIncome(state, player);
-        int availableMoney = state.getScores().get(player).getMoney() + income
-                + (bonus == BonusTileUsage.MONEY ? 10 : 0);
+        int currentMoney = state.getScores().get(player).getMoney();
+        int baseAvailableMoney = currentMoney + income; // before bonus — used for skip-end check
+        int availableMoney = baseAvailableMoney + (bonus == BonusTileUsage.MONEY ? 10 : 0);
         int extensionCost = extensions.stream()
                 .mapToInt(t -> minExpansionCost(state, player, t).getAsInt())
                 .sum();
@@ -687,10 +694,15 @@ public class FranchiseService {
         // Phase 5: Region scoring
         checkAllRegions(state, player, log);
 
-        // Game end check
+        // Game end check (region track reached red zone)
         if (state.getRegionTrackIndex() >= RED_ZONE_INDEX + 1) {
             doFinalScoring(state);
             state.setEnd(true);
+        }
+
+        // Game end check (all players unable to expand consecutively)
+        if (!state.isEnd()) {
+            updateConsecutiveSkipCounter(state, player, extensions, baseAvailableMoney);
         }
 
         // Advance turn
@@ -941,11 +953,40 @@ public class FranchiseService {
     // Final scoring
     // -------------------------------------------------------------------------
 
+    /**
+     * Updates the consecutive-skip counter and ends the game if all players in a row
+     * were genuinely unable to expand (no affordable reachable city).
+     * Resets the counter when the player expanded OR when they chose to skip but could
+     * have afforded at least one expansion (i.e. they are saving up).
+     */
+    private void updateConsecutiveSkipCounter(GameState state, PlayerColor player,
+                                               List<City> extensions, int availableMoney) {
+        if (!extensions.isEmpty()) {
+            state.setConsecutiveSkipsWithoutExpansion(0);
+            return;
+        }
+        // Player skipped — determine whether they were forced to or chose to
+        Set<City> myCities = citiesWithPresence(state, player);
+        Set<City> targets = validExpansionTargetsFrom(state, player, myCities);
+        Map<City, Integer> costMap = expansionCostMap(myCities, targets);
+        boolean couldExpand = costMap.values().stream().anyMatch(c -> availableMoney >= c);
+        if (couldExpand) {
+            state.setConsecutiveSkipsWithoutExpansion(0);
+        } else {
+            int count = state.getConsecutiveSkipsWithoutExpansion() + 1;
+            state.setConsecutiveSkipsWithoutExpansion(count);
+            if (count >= state.getPlayers().size()) {
+                doFinalScoring(state);
+                state.setEnd(true);
+            }
+        }
+    }
+
     private void doFinalScoring(GameState state) {
-        // +1 per branch in small town
+        // +1 per branch in small town (skip neutral-color fillers used for inactive regions)
         for (City town : City.getTowns()) {
             PlayerColor occupant = state.getCityBranches().get(town)[0];
-            if (occupant != null) {
+            if (occupant != null && state.getScores().containsKey(occupant)) {
                 state.getScores().get(occupant).setInfluence(
                         state.getScores().get(occupant).getInfluence() + 1);
             }
