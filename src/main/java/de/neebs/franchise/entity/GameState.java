@@ -1,6 +1,7 @@
 package de.neebs.franchise.entity;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class GameState {
 
@@ -19,6 +20,7 @@ public class GameState {
     private int regionTrackIndex;
     private List<Region> inactiveRegions;
     private List<DrawRecord> drawHistory;
+    private int consecutiveSkipsWithoutExpansion;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -64,4 +66,39 @@ public class GameState {
 
     public List<DrawRecord> getDrawHistory() { return drawHistory; }
     public void setDrawHistory(List<DrawRecord> drawHistory) { this.drawHistory = drawHistory; }
+
+    public int getConsecutiveSkipsWithoutExpansion() { return consecutiveSkipsWithoutExpansion; }
+    public void setConsecutiveSkipsWithoutExpansion(int consecutiveSkipsWithoutExpansion) {
+        this.consecutiveSkipsWithoutExpansion = consecutiveSkipsWithoutExpansion;
+    }
+
+    public GameState deepCopy() {
+        GameState copy = new GameState();
+        copy.id = this.id;
+        copy.initialization = this.initialization;
+        copy.end = this.end;
+        copy.round = this.round;
+        copy.currentPlayerIndex = this.currentPlayerIndex;
+        copy.regionTrackIndex = this.regionTrackIndex;
+        copy.consecutiveSkipsWithoutExpansion = this.consecutiveSkipsWithoutExpansion;
+        copy.players = new ArrayList<>(this.players);
+        copy.inactiveRegions = new ArrayList<>(this.inactiveRegions);
+        copy.closedRegions = new ArrayList<>(this.closedRegions);
+        copy.closedCities = new HashSet<>(this.closedCities);
+        copy.regionFirstScorer = new EnumMap<>(this.regionFirstScorer);
+
+        copy.scores = this.scores.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().copy(),
+                        (a, b) -> a, () -> new EnumMap<>(PlayerColor.class)));
+
+        copy.supply = new EnumMap<>(this.supply);
+
+        Map<City, PlayerColor[]> branchesCopy = new EnumMap<>(City.class);
+        this.cityBranches.forEach((city, arr) -> branchesCopy.put(city, arr.clone()));
+        copy.cityBranches = branchesCopy;
+
+        // DrawRecord fields are set once and never mutated — shallow copy is safe
+        copy.drawHistory = new ArrayList<>(this.drawHistory);
+        return copy;
+    }
 }

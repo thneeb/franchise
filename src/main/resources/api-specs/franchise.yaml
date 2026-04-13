@@ -108,6 +108,21 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/GameField'
+  /franchise/calibrate:
+    post:
+      operationId: calibrateStrategy
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/CalibrateConfig'
+      responses:
+        '200':
+          description: Returns the calibration result with parameter rankings
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/CalibrationResult'
   /franchise/{gameId}/learnings:
     parameters:
       -
@@ -247,6 +262,7 @@ components:
         - COMPUTER
     ComputerStrategy:
       enum:
+        - RANDOM
         - MONTE_CARLO_TREE_SEARCH
         - MAXIMAX
         - MINIMAX
@@ -293,6 +309,47 @@ components:
           $ref: '#/components/schemas/PlayerColor'
         value:
           type: integer
+    CalibrateConfig:
+      properties:
+        playerCount:
+          type: integer
+          default: 2
+        gamesPerMatchup:
+          type: integer
+          default: 4
+        depth:
+          type: integer
+          default: 2
+    EvalParams:
+      properties:
+        earlyIncomeWeight:
+          type: integer
+        lateIncomeWeight:
+          type: integer
+    EvalParamsRanking:
+      allOf:
+        - $ref: '#/components/schemas/EvalParams'
+        - properties:
+            wins:
+              type: integer
+            winRate:
+              type: number
+    CalibrationResult:
+      properties:
+        playerCount:
+          type: integer
+        calibratedAt:
+          type: string
+        gamesPerMatchup:
+          type: integer
+        depth:
+          type: integer
+        winner:
+          $ref: '#/components/schemas/EvalParams'
+        rankings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvalParamsRanking'
     BonusTileUsage:
       enum:
         - MONEY
