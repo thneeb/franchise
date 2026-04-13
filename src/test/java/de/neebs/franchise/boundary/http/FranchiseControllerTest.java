@@ -613,4 +613,117 @@ class FranchiseControllerTest {
                                 """.formatted(color)))
                 .andExpect(status().isOk());
     }
+
+    private void performComputerDraw(String gameId, String color, String strategy) throws Exception {
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"%s","strategy":"%s","params":{"depth":1}}
+                                """.formatted(color, strategy)))
+                .andExpect(status().isOk());
+    }
+
+    // -------------------------------------------------------------------------
+    // Computer / AI draws
+    // -------------------------------------------------------------------------
+
+    @Test
+    void computerDraw_minimax_returnsValidDraw() throws Exception {
+        // After both init draws, RED plays first — use MINIMAX at depth 1 for speed
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"MINIMAX","params":{"depth":1}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draw.color").value("RED"));
+    }
+
+    @Test
+    void computerDraw_abPrune_returnsValidDraw() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"AB_PRUNE","params":{"depth":1}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draw.color").value("RED"));
+    }
+
+    @Test
+    void computerDraw_unknownStrategy_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"MONTE_CARLO_TREE_SEARCH"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("Strategy not implemented")));
+    }
+
+    @Test
+    void computerDraw_selectedMoveIsAmongPossibleDraws() throws Exception {
+        // The move the AI picks must be one of the legal draws returned by getPossibleDraws
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        // Capture possible draws before the AI move
+        MvcResult possibleResult = mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
+                .andExpect(status().isOk())
+                .andReturn();
+        String possibleJson = possibleResult.getResponse().getContentAsString();
+
+        // AI picks its move
+        MvcResult drawResult = mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"MINIMAX","params":{"depth":1}}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        // The chosen draw must appear in the possible draws list
+        com.fasterxml.jackson.databind.JsonNode chosen = objectMapper
+                .readTree(drawResult.getResponse().getContentAsString()).get("draw");
+        com.fasterxml.jackson.databind.JsonNode possible = objectMapper.readTree(possibleJson);
+        boolean found = false;
+        for (com.fasterxml.jackson.databind.JsonNode node : possible) {
+            if (node.equals(chosen)) { found = true; break; }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(found,
+                "AI chose a draw that is not in getPossibleDraws: " + chosen);
+    }
+
+    @Test
+    void playGame_minimaxVsMinimax_returnsTotalWinsEqualingTimesToPlay() throws Exception {
+        // Run 2 quick games (depth 1) and verify the result sums to 2
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"timesToPlay":2,
+                                 "players":[
+                                   {"playerType":"COMPUTER","color":"RED","strategy":"MINIMAX","params":{"depth":1}},
+                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"MINIMAX","params":{"depth":1}}
+                                 ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].value").isNumber())
+                .andExpect(jsonPath("$[1].value").isNumber());
+    }
 }

@@ -54,12 +54,17 @@ public class FranchiseController implements FranchiseApi {
 
     @Override
     public ResponseEntity<ExtendedDraw> createDraw(String gameId, Draw draw) {
-        if (!(draw instanceof HumanDraw humanDraw)) {
-            return ResponseEntity.badRequest().build();
+        if (draw instanceof HumanDraw humanDraw) {
+            DrawRecord record = toDrawRecord(humanDraw);
+            DrawResult result = franchiseService.applyDraw(gameId, record);
+            return ResponseEntity.ok(toExtendedDraw(result));
+        } else if (draw instanceof ComputerPlayer cp) {
+            String strategyName = cp.getStrategy().name();
+            Map<String, Object> params = cp.getParams() != null ? cp.getParams() : Map.of();
+            DrawResult result = franchiseService.computeBestDraw(gameId, strategyName, params);
+            return ResponseEntity.ok(toExtendedDraw(result));
         }
-        DrawRecord record = toDrawRecord(humanDraw);
-        DrawResult result = franchiseService.applyDraw(gameId, record);
-        return ResponseEntity.ok(toExtendedDraw(result));
+        return ResponseEntity.badRequest().build();
     }
 
     @Override
@@ -76,7 +81,27 @@ public class FranchiseController implements FranchiseApi {
 
     @Override
     public ResponseEntity<List<PlayerColorAndInteger>> playGame(String gameId, PlayConfig playConfig) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+        List<de.neebs.franchise.entity.PlayerColor> players = playConfig.getPlayers().stream()
+                .map(cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()))
+                .collect(Collectors.toList());
+
+        Map<de.neebs.franchise.entity.PlayerColor, String> strategies = playConfig.getPlayers().stream()
+                .collect(Collectors.toMap(
+                        cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()),
+                        cp -> cp.getStrategy().name()));
+
+        Map<String, Object> params = playConfig.getParams() != null ? playConfig.getParams() : Map.of();
+        int times = playConfig.getTimesToPlay() != null ? playConfig.getTimesToPlay() : 1;
+
+        Map<de.neebs.franchise.entity.PlayerColor, Integer> wins =
+                franchiseService.runGames(players, strategies, params, times);
+
+        List<PlayerColorAndInteger> result = wins.entrySet().stream()
+                .map(e -> new PlayerColorAndInteger()
+                        .color(PlayerColor.valueOf(e.getKey().name()))
+                        .value(e.getValue()))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 
     // -------------------------------------------------------------------------

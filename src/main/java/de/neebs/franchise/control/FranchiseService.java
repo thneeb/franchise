@@ -16,6 +16,14 @@ public class FranchiseService {
 
     private final Map<String, GameState> games = new ConcurrentHashMap<>();
 
+    // Injected lazily to avoid circular dependency (strategies → service → strategies)
+    private Map<String, GameStrategy> strategies = Map.of();
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setStrategies(Map<String, GameStrategy> strategies) {
+        this.strategies = strategies;
+    }
+
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
@@ -165,6 +173,77 @@ public class FranchiseService {
     public DrawRecord getDraw(String gameId, int index) {
         GameState state = getGame(gameId);
         return state.getDrawHistory().get(index);
+    }
+
+    // Returns all legal draws for an arbitrary state (used by AI strategies)
+    public List<DrawRecord> getPossibleDrawsForState(GameState state) {
+        // Temporarily register the state so the existing logic can look it up by id
+        String tmpId = state.getId() + "-sim";
+        GameState copy = state.deepCopy();
+        copy.setId(tmpId);
+        games.put(tmpId, copy);
+        try {
+            return getPossibleDraws(tmpId);
+        } finally {
+            games.remove(tmpId);
+        }
+    }
+
+    // Deep-copies state, applies the draw to the copy, and returns the mutated copy
+    public GameState applyDrawOnState(GameState state, DrawRecord draw) {
+        String tmpId = state.getId() + "-sim";
+        GameState copy = state.deepCopy();
+        copy.setId(tmpId);
+        games.put(tmpId, copy);
+        try {
+            applyDraw(tmpId, draw);
+            return games.get(tmpId);
+        } finally {
+            games.remove(tmpId);
+        }
+    }
+
+    // Selects and applies the best draw for the current player using the given strategy
+    public DrawResult computeBestDraw(String gameId, String strategyName, Map<String, Object> params) {
+        GameStrategy strategy = strategies.get(strategyName);
+        if (strategy == null) {
+            throw new IllegalArgumentException("Strategy not implemented: " + strategyName);
+        }
+        GameState state = getGame(gameId);
+        PlayerColor player = currentPlayer(state);
+        DrawRecord best = strategy.selectDraw(state, player, params);
+        return applyDraw(gameId, best);
+    }
+
+    // Runs timesToPlay full headless games and returns win counts per player
+    public Map<PlayerColor, Integer> runGames(List<PlayerColor> players,
+                                              Map<PlayerColor, String> playerStrategies,
+                                              Map<String, Object> params,
+                                              int timesToPlay) {
+        Map<PlayerColor, Integer> wins = new EnumMap<>(PlayerColor.class);
+        players.forEach(p -> wins.put(p, 0));
+
+        for (int i = 0; i < timesToPlay; i++) {
+            String tmpId = UUID.randomUUID().toString();
+            GameState state = buildInitialState(tmpId, players);
+            games.put(tmpId, state);
+            try {
+                while (!games.get(tmpId).isEnd()) {
+                    PlayerColor current = currentPlayer(games.get(tmpId));
+                    String strategyName = playerStrategies.get(current);
+                    computeBestDraw(tmpId, strategyName, params);
+                }
+                PlayerColor winner = games.get(tmpId).getScores().entrySet().stream()
+                        .max(Map.Entry.comparingByValue(
+                                Comparator.comparingInt(s -> s.getInfluence())))
+                        .map(Map.Entry::getKey)
+                        .orElseThrow();
+                wins.merge(winner, 1, Integer::sum);
+            } finally {
+                games.remove(tmpId);
+            }
+        }
+        return wins;
     }
 
     public GameState undoDraws(String gameId, int fromIndex) {
