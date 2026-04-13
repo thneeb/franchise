@@ -12,7 +12,7 @@ import java.util.OptionalInt;
 public class FranchiseService {
 
     private static final int INITIAL_SUPPLY = 40;
-    private static final int RED_ZONE_INDEX = 8; // track indices 8-9 are red zone
+    private static final int RED_ZONE_INDEX = 8; // red zone = last 3 track positions (7, 8, 9); game ends on entry to index 8
 
     private final Map<String, GameState> games = new ConcurrentHashMap<>();
 
@@ -358,7 +358,7 @@ public class FranchiseService {
         checkAllRegions(state, player, log);
 
         // Game end check (region track reached red zone)
-        if (state.getRegionTrackIndex() >= RED_ZONE_INDEX + 1) {
+        if (state.getRegionTrackIndex() >= RED_ZONE_INDEX) {
             doFinalScoring(state);
             state.setEnd(true);
         }
@@ -467,7 +467,6 @@ public class FranchiseService {
         state.setClosedCities(new HashSet<>());
         state.setClosedRegions(new ArrayList<>());
         state.setRegionFirstScorer(new EnumMap<>(Region.class));
-        state.setRegionTrackIndex(0);
         state.setDrawHistory(new ArrayList<>());
 
         // 2- or 3-player adjustment: three fixed regions are inactive.
@@ -478,6 +477,8 @@ public class FranchiseService {
             applyInactiveRegions(state, inactive, neutralColor);
         }
         state.setInactiveRegions(new ArrayList<>(inactive));
+        // Inactive regions are pre-scored at game start; advance the track index accordingly
+        state.setRegionTrackIndex(inactive.size());
 
         return state;
     }
@@ -709,7 +710,7 @@ public class FranchiseService {
         checkAllRegions(state, player, log);
 
         // Game end check (region track reached red zone)
-        if (state.getRegionTrackIndex() >= RED_ZONE_INDEX + 1) {
+        if (state.getRegionTrackIndex() >= RED_ZONE_INDEX) {
             doFinalScoring(state);
             state.setEnd(true);
         }
