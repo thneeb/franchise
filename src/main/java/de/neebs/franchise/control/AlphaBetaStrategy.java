@@ -19,15 +19,20 @@ import java.util.Map;
 public class AlphaBetaStrategy implements GameStrategy {
 
     private final FranchiseService franchiseService;
+    private final CalibrationService calibrationService;
 
-    public AlphaBetaStrategy(@Lazy FranchiseService franchiseService) {
+    public AlphaBetaStrategy(@Lazy FranchiseService franchiseService,
+                              @Lazy CalibrationService calibrationService) {
         this.franchiseService = franchiseService;
+        this.calibrationService = calibrationService;
     }
 
     @Override
     public DrawRecord selectDraw(GameState state, PlayerColor player, Map<String, Object> params) {
-        int depth = MinimaxStrategy.parseDepth(params);
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
+        Map<String, Object> resolvedParams = MinimaxStrategy.resolveAutoParams(
+                params, state.getPlayers().size(), calibrationService);
+        int depth = MinimaxStrategy.parseDepth(resolvedParams);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
         if (moves.isEmpty()) {
             throw new IllegalStateException("No legal draws available for " + player);
         }
@@ -36,7 +41,7 @@ public class AlphaBetaStrategy implements GameStrategy {
         int alpha = Integer.MIN_VALUE;
         for (DrawRecord move : moves) {
             GameState next = franchiseService.applyDrawOnState(state, move);
-            int score = paranoid(next, depth - 1, alpha, Integer.MAX_VALUE, player, params);
+            int score = paranoid(next, depth - 1, alpha, Integer.MAX_VALUE, player, resolvedParams);
             if (score > alpha) {
                 alpha = score;
                 best = move;
@@ -56,7 +61,7 @@ public class AlphaBetaStrategy implements GameStrategy {
         }
 
         PlayerColor mover = state.getPlayers().get(state.getCurrentPlayerIndex());
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
         if (moves.isEmpty()) {
             return MinimaxStrategy.evaluate(state, params).get(maximizer);
         }

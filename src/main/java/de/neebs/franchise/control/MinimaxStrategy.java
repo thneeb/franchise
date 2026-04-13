@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,15 +23,20 @@ public class MinimaxStrategy implements GameStrategy {
     private static final int DEFAULT_DEPTH = 3;
 
     private final FranchiseService franchiseService;
+    private final CalibrationService calibrationService;
 
-    public MinimaxStrategy(@Lazy FranchiseService franchiseService) {
+    public MinimaxStrategy(@Lazy FranchiseService franchiseService,
+                           @Lazy CalibrationService calibrationService) {
         this.franchiseService = franchiseService;
+        this.calibrationService = calibrationService;
     }
 
     @Override
     public DrawRecord selectDraw(GameState state, PlayerColor player, Map<String, Object> params) {
-        int depth = parseDepth(params);
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
+        Map<String, Object> resolvedParams = resolveAutoParams(params, state.getPlayers().size(),
+                calibrationService);
+        int depth = parseDepth(resolvedParams);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
         if (moves.isEmpty()) {
             throw new IllegalStateException("No legal draws available for " + player);
         }
@@ -39,7 +45,7 @@ public class MinimaxStrategy implements GameStrategy {
         int bestScore = Integer.MIN_VALUE;
         for (DrawRecord move : moves) {
             GameState next = franchiseService.applyDrawOnState(state, move);
-            int score = maxn(next, depth - 1, params).get(player);
+            int score = maxn(next, depth - 1, resolvedParams).get(player);
             if (score > bestScore) {
                 bestScore = score;
                 best = move;
@@ -54,7 +60,7 @@ public class MinimaxStrategy implements GameStrategy {
             return evaluate(state, params);
         }
         PlayerColor mover = state.getPlayers().get(state.getCurrentPlayerIndex());
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
         if (moves.isEmpty()) {
             return evaluate(state, params);
         }
@@ -99,15 +105,39 @@ public class MinimaxStrategy implements GameStrategy {
                         + s.getMoney() / 3
                         + s.getBonusTiles() * 4
                         + countSmallTownBranches(state, p);
+                case "AUTO_RESOLVED" -> {
+                    // Dynamic weights interpolated from calibrated early/late values
+                    double progress = Math.min(1.0, state.getRegionTrackIndex() / 9.0);
+                    int earlyW = parseInt(params, "calibEarlyWeight", 3);
+                    int lateW  = parseInt(params, "calibLateWeight",  1);
+                    int iw  = (int) Math.round(earlyW * (1.0 - progress) + lateW * progress);
+                    int btw = (int) Math.round(2 + 2 * progress);
+                    yield s.getInfluence()
+                        + s.getIncome() * iw
+                        + s.getMoney() / 3
+                        + s.getBonusTiles() * btw
+                        + countAllBranches(state, p);
+                }
                 default -> // BALANCED
                     s.getInfluence()
                         + s.getIncome() * incomeWeight
                         + s.getMoney() / 3
-                        + s.getBonusTiles() * 2;
+                        + s.getBonusTiles() * 2
+                        + countAllBranches(state, p); // incentivise expansion over pure skipping
             };
             result.put(p, score);
         }
         return result;
+    }
+
+    private static int countAllBranches(GameState state, PlayerColor player) {
+        int count = 0;
+        for (City city : City.values()) {
+            for (PlayerColor slot : state.getCityBranches().get(city)) {
+                if (slot == player) count++;
+            }
+        }
+        return count;
     }
 
     private static int countSmallTownBranches(GameState state, PlayerColor player) {
@@ -134,5 +164,29 @@ public class MinimaxStrategy implements GameStrategy {
         Object v = params.get(key);
         if (v instanceof String s) return s;
         return defaultValue;
+    }
+
+    /**
+     * If evalMode=AUTO, loads the calibration config for the given player count and replaces
+     * evalMode with AUTO_RESOLVED, adding calibEarlyWeight and calibLateWeight to the params map.
+     * Throws IllegalArgumentException if no calibration config exists for the player count.
+     */
+    static Map<String, Object> resolveAutoParams(Map<String, Object> params, int playerCount,
+                                                  CalibrationService calibrationService) {
+        if (!"AUTO".equals(parseString(params, "evalMode", "BALANCED"))) {
+            return params != null ? params : Map.of();
+        }
+        de.neebs.franchise.entity.CalibrationConfig cfg =
+                calibrationService.loadConfig(playerCount);
+        if (cfg == null) {
+            throw new IllegalArgumentException(
+                    "No calibration config found for " + playerCount
+                    + "-player game — run POST /franchise/calibrate first");
+        }
+        Map<String, Object> resolved = new HashMap<>(params != null ? params : Map.of());
+        resolved.put("evalMode", "AUTO_RESOLVED");
+        resolved.put("calibEarlyWeight", cfg.getWinner().getEarlyIncomeWeight());
+        resolved.put("calibLateWeight",  cfg.getWinner().getLateIncomeWeight());
+        return resolved;
     }
 }

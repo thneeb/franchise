@@ -18,10 +18,16 @@ public class FranchiseService {
 
     // Injected lazily to avoid circular dependency (strategies → service → strategies)
     private Map<String, GameStrategy> strategies = Map.of();
+    private CalibrationService calibrationService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setStrategies(Map<String, GameStrategy> strategies) {
         this.strategies = strategies;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCalibrationService(@org.springframework.context.annotation.Lazy CalibrationService calibrationService) {
+        this.calibrationService = calibrationService;
     }
 
     // -------------------------------------------------------------------------
@@ -64,6 +70,11 @@ public class FranchiseService {
 
     public List<DrawRecord> getPossibleDraws(String gameId) {
         GameState state = getGame(gameId);
+        return getPossibleDrawsFromState(state);
+    }
+
+    // Core move-generation logic operating directly on a GameState (no HashMap lookup).
+    private List<DrawRecord> getPossibleDrawsFromState(GameState state) {
         PlayerColor player = currentPlayer(state);
         List<DrawRecord> draws = new ArrayList<>();
 
@@ -82,7 +93,10 @@ public class FranchiseService {
         boolean bonusEligible = state.getRound() > state.getPlayers().size()
                 && score.getBonusTiles() > 0;
 
-        Set<City> expansionTargets = validExpansionTargets(state, player);
+        // Precompute once — avoids O(N²) recomputation inside nested loops
+        Set<City> myCities = citiesWithPresence(state, player);
+        Set<City> expansionTargets = validExpansionTargetsFrom(state, player, myCities);
+        Map<City, Integer> costMap = expansionCostMap(myCities, expansionTargets);
         Set<City> increaseCities = validIncreaseCities(state, player, List.of());
 
         // --- No bonus tile ---
@@ -92,7 +106,7 @@ public class FranchiseService {
 
         // Single extension (+ optional single increase)
         for (City ext : expansionTargets) {
-            int extCost = minExpansionCost(state, player, ext).getAsInt();
+            int extCost = costMap.get(ext);
             if (availableMoney >= extCost) {
                 draws.add(draw(player, List.of(ext), List.of(), null));
                 for (City inc : validIncreaseCities(state, player, List.of(ext))) {
@@ -116,7 +130,7 @@ public class FranchiseService {
             int moneyAvailable = availableMoney + 10;
             draws.add(draw(player, List.of(), List.of(), BonusTileUsage.MONEY));
             for (City ext : expansionTargets) {
-                int extCost = minExpansionCost(state, player, ext).getAsInt();
+                int extCost = costMap.get(ext);
                 if (moneyAvailable >= extCost) {
                     draws.add(draw(player, List.of(ext), List.of(), BonusTileUsage.MONEY));
                     for (City inc : validIncreaseCities(state, player, List.of(ext))) {
@@ -138,8 +152,8 @@ public class FranchiseService {
                 for (int j = i + 1; j < extList.size(); j++) {
                     City ext1 = extList.get(i);
                     City ext2 = extList.get(j);
-                    int cost1 = minExpansionCost(state, player, ext1).getAsInt();
-                    int cost2 = minExpansionCost(state, player, ext2).getAsInt();
+                    int cost1 = costMap.get(ext1);
+                    int cost2 = costMap.get(ext2);
                     if (availableMoney >= cost1 + cost2) {
                         draws.add(draw(player, List.of(ext1, ext2), List.of(), BonusTileUsage.EXTENSION));
                         for (City inc : validIncreaseCities(state, player, List.of(ext1, ext2))) {
@@ -158,7 +172,7 @@ public class FranchiseService {
                 if (availableMoney >= 1) {
                     draws.add(draw(player, List.of(), List.of(inc, inc), BonusTileUsage.INCREASE));
                     for (City ext : expansionTargets) {
-                        int extCost = minExpansionCost(state, player, ext).getAsInt();
+                        int extCost = costMap.get(ext);
                         if (availableMoney >= extCost + 1) {
                             draws.add(draw(player, List.of(ext), List.of(inc, inc), BonusTileUsage.INCREASE));
                         }
@@ -177,30 +191,181 @@ public class FranchiseService {
 
     // Returns all legal draws for an arbitrary state (used by AI strategies)
     public List<DrawRecord> getPossibleDrawsForState(GameState state) {
-        // Temporarily register the state so the existing logic can look it up by id
-        String tmpId = state.getId() + "-sim";
-        GameState copy = state.deepCopy();
-        copy.setId(tmpId);
-        games.put(tmpId, copy);
-        try {
-            return getPossibleDraws(tmpId);
-        } finally {
-            games.remove(tmpId);
+        return getPossibleDrawsFromState(state);
+    }
+
+    /**
+     * Returns a pruned move list for AI search.
+     * Skips the combinatorial EXTENSION-bonus pairs (O(N²)) that inflate the
+     * branching factor from ~30 to ~500+ mid-game.  All other move types are kept.
+     * This keeps the branching factor at O(N) ≈ 30-60, making minimax tractable.
+     */
+    public List<DrawRecord> getPossibleDrawsForAI(GameState state) {
+        PlayerColor player = currentPlayer(state);
+        List<DrawRecord> draws = new ArrayList<>();
+
+        if (state.isInitialization()) {
+            return getPossibleDrawsFromState(state); // small set during init, no pruning needed
         }
+
+        Score score = state.getScores().get(player);
+        int income = calcIncome(state, player);
+        int availableMoney = score.getMoney() + income;
+        boolean bonusEligible = state.getRound() > state.getPlayers().size()
+                && score.getBonusTiles() > 0;
+
+        Set<City> myCities = citiesWithPresence(state, player);
+        Set<City> expansionTargets = validExpansionTargetsFrom(state, player, myCities);
+        Map<City, Integer> costMap = expansionCostMap(myCities, expansionTargets);
+        Set<City> increaseCities = validIncreaseCities(state, player, List.of());
+
+        // Skip
+        draws.add(draw(player, List.of(), List.of(), null));
+
+        // Single extension (+ optional single increase)
+        for (City ext : expansionTargets) {
+            int extCost = costMap.get(ext);
+            if (availableMoney >= extCost) {
+                draws.add(draw(player, List.of(ext), List.of(), null));
+                for (City inc : validIncreaseCities(state, player, List.of(ext))) {
+                    if (availableMoney >= extCost + 1) {
+                        draws.add(draw(player, List.of(ext), List.of(inc), null));
+                    }
+                }
+            }
+        }
+
+        // Single increase only
+        for (City inc : increaseCities) {
+            if (availableMoney >= 1) {
+                draws.add(draw(player, List.of(), List.of(inc), null));
+            }
+        }
+
+        if (bonusEligible) {
+            int moneyAvailable = availableMoney + 10;
+            // MONEY bonus + optional extension or increase
+            draws.add(draw(player, List.of(), List.of(), BonusTileUsage.MONEY));
+            for (City ext : expansionTargets) {
+                int extCost = costMap.get(ext);
+                if (moneyAvailable >= extCost) {
+                    draws.add(draw(player, List.of(ext), List.of(), BonusTileUsage.MONEY));
+                }
+            }
+            for (City inc : increaseCities) {
+                if (moneyAvailable >= 1) {
+                    draws.add(draw(player, List.of(), List.of(inc), BonusTileUsage.MONEY));
+                }
+            }
+            // INCREASE bonus: double-increase
+            Set<City> doubleIncreaseCities = validIncreaseCities(state, player, List.of(), 2);
+            for (City inc : doubleIncreaseCities) {
+                if (availableMoney >= 1) {
+                    draws.add(draw(player, List.of(), List.of(inc, inc), BonusTileUsage.INCREASE));
+                }
+            }
+            // NOTE: EXTENSION bonus (N² pairs) intentionally omitted to keep branching factor tractable
+        }
+
+        return draws;
     }
 
     // Deep-copies state, applies the draw to the copy, and returns the mutated copy
     public GameState applyDrawOnState(GameState state, DrawRecord draw) {
-        String tmpId = state.getId() + "-sim";
         GameState copy = state.deepCopy();
-        copy.setId(tmpId);
-        games.put(tmpId, copy);
-        try {
-            applyDraw(tmpId, draw);
-            return games.get(tmpId);
-        } finally {
-            games.remove(tmpId);
+        applyDrawToState(copy, draw);
+        return copy;
+    }
+
+    // Applies a draw directly to a GameState (mutable) — used by simulation paths.
+    // Skips all validation; moves must already be legal (generated by getPossibleDrawsForAI).
+    private void applyDrawToState(GameState state, DrawRecord draw) {
+        PlayerColor player = currentPlayer(state);
+        if (state.isInitialization()) {
+            applyInitDraw(state, player, draw);
+        } else {
+            // Precompute myCities and costMap once rather than recomputing in each validation call
+            Set<City> myCities = citiesWithPresence(state, player);
+            List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
+            Map<City, Integer> costMap = expansionCostMap(myCities, new HashSet<>(extensions));
+            applyNormalDrawFast(state, player, draw, myCities, costMap);
         }
+        state.getDrawHistory().add(draw);
+    }
+
+    // Fast path for simulation: skip all validation, use precomputed costs.
+    private void applyNormalDrawFast(GameState state, PlayerColor player, DrawRecord draw,
+                                      Set<City> myCities, Map<City, Integer> costMap) {
+        BonusTileUsage bonus = draw.getBonusTileUsage();
+        List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
+        List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
+
+        int income = calcIncome(state, player);
+        Score score = state.getScores().get(player);
+
+        if (bonus != null) {
+            score.setBonusTiles(score.getBonusTiles() - 1);
+            if (bonus == BonusTileUsage.MONEY) {
+                score.setMoney(score.getMoney() + 10);
+            }
+        }
+
+        // Phase 1: Income
+        score.setMoney(score.getMoney() + income);
+        score.setIncome(income);
+
+        // Phase 2: Pay extension costs
+        for (City target : extensions) {
+            int cost = costMap.getOrDefault(target, 0);
+            score.setMoney(score.getMoney() - cost);
+        }
+
+        // Phase 3: Pay increase costs
+        if (bonus == BonusTileUsage.INCREASE) {
+            score.setMoney(score.getMoney() - 1);
+            state.getSupply().merge(player, -2, Integer::sum);
+        } else {
+            for (City city : increases) {
+                score.setMoney(score.getMoney() - 1);
+                state.getSupply().merge(player, -1, Integer::sum);
+            }
+        }
+
+        // Phase 4A: Place extension branches
+        List<String> log = new ArrayList<>();
+        for (City target : extensions) {
+            placeNextClockwise(state, player, target, log);
+            state.getSupply().merge(player, -1, Integer::sum);
+        }
+
+        // Phase 4B: Place increase branches
+        if (bonus == BonusTileUsage.INCREASE && !increases.isEmpty()) {
+            placeNextClockwise(state, player, increases.get(0), log);
+            placeNextClockwise(state, player, increases.get(0), log);
+        } else {
+            for (City city : increases) {
+                placeNextClockwise(state, player, city, log);
+            }
+        }
+
+        // Phase 5: Region scoring
+        checkAllRegions(state, player, log);
+
+        // Game end check
+        if (state.getRegionTrackIndex() >= RED_ZONE_INDEX + 1) {
+            doFinalScoring(state);
+            state.setEnd(true);
+        }
+
+        // Advance turn
+        state.setCurrentPlayerIndex(
+                (state.getCurrentPlayerIndex() + 1) % state.getPlayers().size());
+        state.setRound(state.getRound() + 1);
+    }
+
+    // Runs calibration tournament and persists the result
+    public CalibrationConfig calibrate(int playerCount, int gamesPerMatchup, int depth) {
+        return calibrationService.calibrate(playerCount, gamesPerMatchup, depth);
     }
 
     // Selects and applies the best draw for the current player using the given strategy
@@ -216,9 +381,12 @@ public class FranchiseService {
     }
 
     // Runs timesToPlay full headless games and returns win counts per player
+    // Maximum turns before a headless game is cut short (same guard as in CalibrationService)
+    private static final int MAX_HEADLESS_GAME_TURNS = 120;
+
     public Map<PlayerColor, Integer> runGames(List<PlayerColor> players,
                                               Map<PlayerColor, String> playerStrategies,
-                                              Map<String, Object> params,
+                                              Map<PlayerColor, Map<String, Object>> playerParams,
                                               int timesToPlay) {
         Map<PlayerColor, Integer> wins = new EnumMap<>(PlayerColor.class);
         players.forEach(p -> wins.put(p, 0));
@@ -227,11 +395,14 @@ public class FranchiseService {
             String tmpId = UUID.randomUUID().toString();
             GameState state = buildInitialState(tmpId, players);
             games.put(tmpId, state);
+            int turns = 0;
             try {
-                while (!games.get(tmpId).isEnd()) {
+                while (!games.get(tmpId).isEnd() && turns < MAX_HEADLESS_GAME_TURNS) {
                     PlayerColor current = currentPlayer(games.get(tmpId));
                     String strategyName = playerStrategies.get(current);
+                    Map<String, Object> params = playerParams.getOrDefault(current, Map.of());
                     computeBestDraw(tmpId, strategyName, params);
+                    turns++;
                 }
                 PlayerColor winner = games.get(tmpId).getScores().entrySet().stream()
                         .max(Map.Entry.comparingByValue(
@@ -264,6 +435,11 @@ public class FranchiseService {
     // -------------------------------------------------------------------------
     // Game initialization
     // -------------------------------------------------------------------------
+
+    // Package-visible so CalibrationService can build transient states without storing them
+    GameState buildInitialStatePublic(String id, List<PlayerColor> players) {
+        return buildInitialState(id, players);
+    }
 
     private GameState buildInitialState(String id, List<PlayerColor> players) {
         GameState state = new GameState();
@@ -813,7 +989,10 @@ public class FranchiseService {
     }
 
     private Set<City> validExpansionTargets(GameState state, PlayerColor player) {
-        Set<City> myCities = citiesWithPresence(state, player);
+        return validExpansionTargetsFrom(state, player, citiesWithPresence(state, player));
+    }
+
+    private Set<City> validExpansionTargetsFrom(GameState state, PlayerColor player, Set<City> myCities) {
         Set<City> targets = new HashSet<>();
         for (Connection conn : Rules.CONNECTIONS) {
             City[] pair = conn.cities().toArray(new City[0]);
@@ -826,6 +1005,21 @@ public class FranchiseService {
             }
         }
         return targets;
+    }
+
+    // Pre-compute minimum expansion cost for each target city given already-computed myCities.
+    private Map<City, Integer> expansionCostMap(Set<City> myCities, Set<City> targets) {
+        Map<City, Integer> costs = new EnumMap<>(City.class);
+        for (City target : targets) {
+            int minCost = Rules.CONNECTIONS.stream()
+                    .filter(c -> c.cities().contains(target))
+                    .filter(c -> c.cities().stream().anyMatch(city -> city != target && myCities.contains(city)))
+                    .mapToInt(Connection::cost)
+                    .min()
+                    .orElse(0);
+            costs.put(target, minCost);
+        }
+        return costs;
     }
 
     private boolean isValidTarget(GameState state, PlayerColor player, City target) {

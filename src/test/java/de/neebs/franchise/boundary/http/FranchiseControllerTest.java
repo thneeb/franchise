@@ -708,6 +708,22 @@ class FranchiseControllerTest {
     }
 
     @Test
+    void calibrateStrategy_twoPlayers_returnsRankings() throws Exception {
+        // Run a minimal calibration (2 games per matchup, depth 1) for speed
+        mockMvc.perform(post("/franchise/calibrate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerCount":2,"gamesPerMatchup":2,"depth":1}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.playerCount").value(2))
+                .andExpect(jsonPath("$.winner").exists())
+                .andExpect(jsonPath("$.winner.earlyIncomeWeight").isNumber())
+                .andExpect(jsonPath("$.winner.lateIncomeWeight").isNumber())
+                .andExpect(jsonPath("$.rankings", hasSize(15)));
+    }
+
+    @Test
     void playGame_minimaxVsMinimax_returnsTotalWinsEqualingTimesToPlay() throws Exception {
         // Run 2 quick games (depth 1) and verify the result sums to 2
         String gameId = createGame("RED", "BLUE");

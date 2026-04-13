@@ -2,8 +2,11 @@ package de.neebs.franchise.boundary.http;
 
 import de.neebs.franchise.boundary.http.model.*;
 import de.neebs.franchise.control.FranchiseService;
+import de.neebs.franchise.entity.CalibrationConfig;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.DrawResult;
+import de.neebs.franchise.entity.EvalParams;
+import de.neebs.franchise.entity.EvalParamsRanking;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.Score;
 import org.springframework.http.HttpHeaders;
@@ -11,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -90,11 +94,18 @@ public class FranchiseController implements FranchiseApi {
                         cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()),
                         cp -> cp.getStrategy().name()));
 
-        Map<String, Object> params = playConfig.getParams() != null ? playConfig.getParams() : Map.of();
+        // Per-player params override global params; fall back to global then empty map
+        Map<String, Object> globalParams = playConfig.getParams() != null ? playConfig.getParams() : Map.of();
+        Map<de.neebs.franchise.entity.PlayerColor, Map<String, Object>> playerParams =
+                playConfig.getPlayers().stream()
+                        .collect(Collectors.toMap(
+                                cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()),
+                                cp -> cp.getParams() != null ? cp.getParams() : globalParams));
+
         int times = playConfig.getTimesToPlay() != null ? playConfig.getTimesToPlay() : 1;
 
         Map<de.neebs.franchise.entity.PlayerColor, Integer> wins =
-                franchiseService.runGames(players, strategies, params, times);
+                franchiseService.runGames(players, strategies, playerParams, times);
 
         List<PlayerColorAndInteger> result = wins.entrySet().stream()
                 .map(e -> new PlayerColorAndInteger()
@@ -233,6 +244,15 @@ public class FranchiseController implements FranchiseApi {
         return record;
     }
 
+    @Override
+    public ResponseEntity<CalibrationResult> calibrateStrategy(CalibrateConfig config) {
+        int playerCount = config != null && config.getPlayerCount() != null ? config.getPlayerCount() : 2;
+        int gamesPerMatchup = config != null && config.getGamesPerMatchup() != null ? config.getGamesPerMatchup() : 4;
+        int depth = config != null && config.getDepth() != null ? config.getDepth() : 2;
+        CalibrationConfig result = franchiseService.calibrate(playerCount, gamesPerMatchup, depth);
+        return ResponseEntity.ok(toCalibrationResult(result));
+    }
+
     // -------------------------------------------------------------------------
     // Mapping: DrawResult → ExtendedDraw
     // -------------------------------------------------------------------------
@@ -245,5 +265,33 @@ public class FranchiseController implements FranchiseApi {
         return new ExtendedDraw()
                 .draw(toHumanDraw(result.getDraw()))
                 .info(info);
+    }
+
+    // -------------------------------------------------------------------------
+    // Mapping: CalibrationConfig → CalibrationResult
+    // -------------------------------------------------------------------------
+
+    private CalibrationResult toCalibrationResult(CalibrationConfig config) {
+        de.neebs.franchise.boundary.http.model.EvalParams winner =
+                new de.neebs.franchise.boundary.http.model.EvalParams()
+                        .earlyIncomeWeight(config.getWinner().getEarlyIncomeWeight())
+                        .lateIncomeWeight(config.getWinner().getLateIncomeWeight());
+
+        List<de.neebs.franchise.boundary.http.model.EvalParamsRanking> rankings =
+                config.getRankings().stream()
+                        .map(r -> new de.neebs.franchise.boundary.http.model.EvalParamsRanking()
+                                .earlyIncomeWeight(r.getEarlyIncomeWeight())
+                                .lateIncomeWeight(r.getLateIncomeWeight())
+                                .wins(r.getWins())
+                                .winRate(BigDecimal.valueOf(r.getWinRate())))
+                        .collect(Collectors.toList());
+
+        return new CalibrationResult()
+                .playerCount(config.getPlayerCount())
+                .calibratedAt(config.getCalibratedAt())
+                .gamesPerMatchup(config.getGamesPerMatchup())
+                .depth(config.getDepth())
+                .winner(winner)
+                .rankings(rankings);
     }
 }
