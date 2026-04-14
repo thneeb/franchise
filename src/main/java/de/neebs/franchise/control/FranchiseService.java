@@ -805,6 +805,7 @@ public class FranchiseService {
     // -------------------------------------------------------------------------
 
     private void checkCityScoring(GameState state, City city, List<String> log) {
+        if (city.getSize() <= 1) return; // towns score only at game end via doFinalScoring
         if (state.getClosedCities().contains(city)) return;
 
         PlayerColor[] slots = state.getCityBranches().get(city);

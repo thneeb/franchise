@@ -3,6 +3,7 @@ package de.neebs.franchise.control;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.PlayerColor;
+import de.neebs.franchise.entity.Score;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -86,16 +87,16 @@ public class ReinforcementLearningStrategy implements TrainableStrategy {
      * <p>Only trains on turns where the mover is using the REINFORCEMENT_LEARNING strategy
      * (i.e. skips opponent turns — training on random/other-strategy turns injects noise).
      *
-     * <p>For each eligible turn {@code i} in the trajectory:
-     * <pre>
-     *   mover     = player whose turn it was at trajectory[i]
-     *   nextState = trajectory[i + 1]   (state after mover's action)
-     *   target    = 1.0 if mover won, 0.5 if tied, 0.0 if mover lost
-     *   train:    V(encode(nextState, mover)) → target
-     * </pre>
-     * Win/loss signal is used instead of the raw score because the absolute score difference
-     * between winning and losing is too small (typically 0.1–0.2 on a 0–1 scale) to overcome
-     * Monte Carlo variance within a reasonable number of training games.
+     * <p>The training target blends two signals based on game progress
+     * (measured by the region-track index, 0 = start, 1 = end):
+     * <ul>
+     *   <li><b>Early game</b>: relative income share ({@code myIncome / totalIncome}).
+     *       Income is the leading indicator of future scoring because influence points are
+     *       collected via income in each round.</li>
+     *   <li><b>Late game</b>: relative influence share ({@code myInfluence / totalInfluence}).
+     *       Once players have established income engines, raw influence position matters more.</li>
+     * </ul>
+     * Both signals are relative shares in [0,1], so a 2-player game produces 0.5 when tied.
      *
      * Synchronised to prevent concurrent training corruption when multiple
      * HTTP requests trigger parallel game loops.
@@ -114,23 +115,28 @@ public class ReinforcementLearningStrategy implements TrainableStrategy {
             PlayerColor mover = before.getPlayers().get(before.getCurrentPlayerIndex());
             // Only train on turns where this strategy was in control
             if (!"REINFORCEMENT_LEARNING".equals(playerStrategies.get(mover))) continue;
-            Integer finalScore = finalScores.get(mover);
-            if (finalScore == null) continue;
-
-            int maxOpponentScore = finalScores.entrySet().stream()
-                    .filter(e -> !e.getKey().equals(mover))
-                    .mapToInt(Map.Entry::getValue)
-                    .max().orElse(0);
-            float target;
-            if (finalScore > maxOpponentScore) {
-                target = 1.0f;
-            } else if (finalScore == maxOpponentScore) {
-                target = 0.5f;
-            } else {
-                target = 0.0f;
-            }
 
             GameState after = trajectory.get(i + 1);
+
+            // Game progress: 0.0 = beginning, 1.0 = end of game
+            float progress = Math.min(1.0f, after.getRegionTrackIndex() / 10.0f);
+
+            // Income-relative share (early-game signal: who is building faster?)
+            int myIncome = after.getScores().get(mover).getIncome();
+            int totalIncome = after.getScores().values().stream().mapToInt(Score::getIncome).sum();
+            float incomeTarget = totalIncome > 0
+                    ? (float) myIncome / totalIncome
+                    : 1.0f / numPlayers;
+
+            // Influence-relative share (late-game signal: who is ahead on the board?)
+            int myInfluence = after.getScores().get(mover).getInfluence();
+            int totalInfluence = after.getScores().values().stream().mapToInt(Score::getInfluence).sum();
+            float influenceTarget = totalInfluence > 0
+                    ? (float) myInfluence / totalInfluence
+                    : 1.0f / numPlayers;
+
+            float target = (1.0f - progress) * incomeTarget + progress * influenceTarget;
+
             network.train(encoder.encode(after, mover), target, DEFAULT_LEARNING_RATE);
         }
 
