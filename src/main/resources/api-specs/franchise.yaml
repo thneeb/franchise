@@ -140,31 +140,18 @@ paths:
               $ref: '#/components/schemas/PlayConfig'
       responses:
         '200':
-          description: Returns win counts per player. When learningModels is non-empty, the X-Learning-Run-Id header contains a run ID that can be polled at GET /franchise/learnings/progress/{runId}.
-          headers:
-            X-Learning-Run-Id:
-              description: Opaque run ID for polling training progress. Present only when learningModels is non-empty.
-              schema:
-                type: string
+          description: Returns win counts per player
           content:
             'application/json':
               schema:
                   type: array
                   items:
                     $ref: '#/components/schemas/PlayerColorAndInteger'
-  /franchise/learnings/progress/{runId}:
-    parameters:
-      -
-        name: runId
-        schema:
-          type: string
-        required: true
-        in: path
     get:
       operationId: getLearningProgress
       responses:
         '200':
-          description: Returns current progress of the given learning run
+          description: Returns current progress of a running or completed learning session for this game ID
           content:
             'application/json':
               schema:
@@ -374,8 +361,6 @@ components:
             $ref: '#/components/schemas/EvalParamsRanking'
     LearningProgress:
       properties:
-        runId:
-          type: string
         gamesCompleted:
           type: integer
         gamesTotal:
