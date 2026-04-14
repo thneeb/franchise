@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -65,7 +66,9 @@ public class FranchiseController implements FranchiseApi {
         } else if (draw instanceof ComputerPlayer cp) {
             String strategyName = cp.getStrategy().name();
             Map<String, Object> params = cp.getParams() != null ? cp.getParams() : Map.of();
-            DrawResult result = franchiseService.computeBestDraw(gameId, strategyName, params);
+            de.neebs.franchise.entity.PlayerColor requestedPlayer =
+                    de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name());
+            DrawResult result = franchiseService.computeBestDraw(gameId, requestedPlayer, strategyName, params);
             return ResponseEntity.ok(toExtendedDraw(result));
         }
         return ResponseEntity.badRequest().build();
@@ -104,8 +107,33 @@ public class FranchiseController implements FranchiseApi {
 
         int times = playConfig.getTimesToPlay() != null ? playConfig.getTimesToPlay() : 1;
 
+        Set<String> learningModels = playConfig.getLearningModels() != null
+                ? playConfig.getLearningModels().stream()
+                        .map(ComputerStrategy::name)
+                        .collect(Collectors.toSet())
+                : Set.of();
+
+        // Auto-inject epsilon=0.3 for any player whose strategy is being trained,
+        // unless the caller has already set a value.
+        if (!learningModels.isEmpty()) {
+            playerParams = playerParams.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> {
+                                String strat = strategies.get(e.getKey());
+                                if (learningModels.contains(strat) && !e.getValue().containsKey("epsilon")) {
+                                    Map<String, Object> merged = new java.util.LinkedHashMap<>(e.getValue());
+                                    merged.put("epsilon", 0.3);
+                                    return merged;
+                                }
+                                return e.getValue();
+                            }));
+        }
+
+        String runId = learningModels.isEmpty() ? null : gameId;
+
         Map<de.neebs.franchise.entity.PlayerColor, Integer> wins =
-                franchiseService.runGames(players, strategies, playerParams, times);
+                franchiseService.runGames(players, strategies, playerParams, learningModels, runId, times);
 
         List<PlayerColorAndInteger> result = wins.entrySet().stream()
                 .map(e -> new PlayerColorAndInteger()
@@ -242,6 +270,20 @@ public class FranchiseController implements FranchiseApi {
         }
 
         return record;
+    }
+
+    @Override
+    public ResponseEntity<de.neebs.franchise.boundary.http.model.LearningProgress> getLearningProgress(String gameId) {
+        de.neebs.franchise.entity.LearningProgress progress = franchiseService.getLearningProgress(gameId);
+        if (progress == null) {
+            return ResponseEntity.notFound().build();
+        }
+        de.neebs.franchise.boundary.http.model.LearningProgress model =
+                new de.neebs.franchise.boundary.http.model.LearningProgress()
+                        .gamesCompleted(progress.getGamesCompleted())
+                        .gamesTotal(progress.getGamesTotal())
+                        .done(progress.isDone());
+        return ResponseEntity.ok(model);
     }
 
     @Override

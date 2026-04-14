@@ -15,6 +15,7 @@ public class FranchiseService {
     private static final int RED_ZONE_INDEX = 8; // red zone = positions 8-10 (1-indexed); game ends when 1st tile reaches position 8, i.e. regionTrackIndex reaches 8
 
     private final Map<String, GameState> games = new ConcurrentHashMap<>();
+    private final Map<String, de.neebs.franchise.entity.LearningProgress> learningRuns = new ConcurrentHashMap<>();
 
     // Injected lazily to avoid circular dependency (strategies → service → strategies)
     private Map<String, GameStrategy> strategies = Map.of();
@@ -381,13 +382,25 @@ public class FranchiseService {
 
     // Selects and applies the best draw for the current player using the given strategy
     public DrawResult computeBestDraw(String gameId, String strategyName, Map<String, Object> params) {
+        return computeBestDraw(gameId, null, strategyName, params);
+    }
+
+    public DrawResult computeBestDraw(String gameId, PlayerColor requestedPlayer,
+                                      String strategyName, Map<String, Object> params) {
         GameStrategy strategy = strategies.get(strategyName);
         if (strategy == null) {
             throw new IllegalArgumentException("Strategy not implemented: " + strategyName);
         }
         GameState state = getGame(gameId);
         PlayerColor player = currentPlayer(state);
+        if (requestedPlayer != null && requestedPlayer != player) {
+            throw new IllegalArgumentException("Not your turn");
+        }
         DrawRecord best = strategy.selectDraw(state, player, params);
+        if (best.getColor() != player) {
+            throw new IllegalArgumentException(
+                    "Strategy selected a draw for " + best.getColor() + " but current player is " + player);
+        }
         return applyDraw(gameId, best);
     }
 
@@ -395,32 +408,62 @@ public class FranchiseService {
     // Maximum turns before a headless game is cut short (same guard as in CalibrationService)
     private static final int MAX_HEADLESS_GAME_TURNS = 120;
 
+    public de.neebs.franchise.entity.LearningProgress getLearningProgress(String runId) {
+        return learningRuns.get(runId);
+    }
+
     public Map<PlayerColor, Integer> runGames(List<PlayerColor> players,
                                               Map<PlayerColor, String> playerStrategies,
                                               Map<PlayerColor, Map<String, Object>> playerParams,
+                                              Set<String> learningModels,
+                                              String runId,
                                               int timesToPlay) {
         Map<PlayerColor, Integer> wins = new EnumMap<>(PlayerColor.class);
         players.forEach(p -> wins.put(p, 0));
+        boolean training = !learningModels.isEmpty();
+
+        de.neebs.franchise.entity.LearningProgress progress = null;
+        if (runId != null) {
+            progress = new de.neebs.franchise.entity.LearningProgress(runId, timesToPlay);
+            learningRuns.put(runId, progress);
+        }
+        final de.neebs.franchise.entity.LearningProgress progressRef = progress;
 
         for (int i = 0; i < timesToPlay; i++) {
             String tmpId = UUID.randomUUID().toString();
             GameState state = buildInitialState(tmpId, players);
             games.put(tmpId, state);
+            List<GameState> trajectory = training ? new ArrayList<>() : null;
             int turns = 0;
             try {
                 while (!games.get(tmpId).isEnd() && turns < MAX_HEADLESS_GAME_TURNS) {
+                    if (training) trajectory.add(games.get(tmpId).deepCopy());
                     PlayerColor current = currentPlayer(games.get(tmpId));
                     String strategyName = playerStrategies.get(current);
                     Map<String, Object> params = playerParams.getOrDefault(current, Map.of());
                     computeBestDraw(tmpId, strategyName, params);
                     turns++;
                 }
+                if (training) trajectory.add(games.get(tmpId).deepCopy());
+
                 PlayerColor winner = games.get(tmpId).getScores().entrySet().stream()
                         .max(Map.Entry.comparingByValue(
                                 Comparator.comparingInt(s -> s.getInfluence())))
                         .map(Map.Entry::getKey)
                         .orElseThrow();
                 wins.merge(winner, 1, Integer::sum);
+                if (progressRef != null) progressRef.increment();
+
+                if (training) {
+                    Map<PlayerColor, Integer> finalScores = new EnumMap<>(PlayerColor.class);
+                    games.get(tmpId).getScores().forEach((p, s) -> finalScores.put(p, s.getInfluence()));
+                    for (String modelName : learningModels) {
+                        GameStrategy strategy = strategies.get(modelName);
+                        if (strategy instanceof TrainableStrategy ts) {
+                            ts.onGameComplete(trajectory, finalScores, playerStrategies);
+                        }
+                    }
+                }
             } finally {
                 games.remove(tmpId);
             }
@@ -539,6 +582,10 @@ public class FranchiseService {
         if (town.getSize() != 1) {
             throw new IllegalArgumentException(
                     "Only small towns (size 1) are allowed during initialization");
+        }
+        if (state.getCityBranches().get(town)[0] != null) {
+            throw new IllegalArgumentException(
+                    "Cannot initialize in " + town.getName() + ": town is already occupied");
         }
         if (state.getClosedCities().contains(town)) {
             throw new IllegalArgumentException(
@@ -755,6 +802,9 @@ public class FranchiseService {
 
     private void placeInSlot(GameState state, City city, int slot, PlayerColor player) {
         state.getCityBranches().get(city)[slot] = player;
+        if (city.getSize() == 1) {
+            state.getClosedCities().add(city);
+        }
     }
 
     private void placeNextClockwise(GameState state, PlayerColor player, City city,
@@ -763,6 +813,9 @@ public class FranchiseService {
         for (int i = 0; i < slots.length; i++) {
             if (slots[i] == null) {
                 slots[i] = player;
+                if (city.getSize() == 1) {
+                    state.getClosedCities().add(city);
+                }
                 checkCityScoring(state, city, log);
                 return;
             }
@@ -774,6 +827,7 @@ public class FranchiseService {
     // -------------------------------------------------------------------------
 
     private void checkCityScoring(GameState state, City city, List<String> log) {
+        if (city.getSize() <= 1) return; // towns score only at game end via doFinalScoring
         if (state.getClosedCities().contains(city)) return;
 
         PlayerColor[] slots = state.getCityBranches().get(city);

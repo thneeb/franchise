@@ -140,13 +140,22 @@ paths:
               $ref: '#/components/schemas/PlayConfig'
       responses:
         '200':
-          description: Returns the played draw
+          description: Returns win counts per player
           content:
             'application/json':
               schema:
                   type: array
                   items:
                     $ref: '#/components/schemas/PlayerColorAndInteger'
+    get:
+      operationId: getLearningProgress
+      responses:
+        '200':
+          description: Returns current progress of a running or completed learning session for this game ID
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LearningProgress'
 components:
   schemas:
     ExtendedDraw:
@@ -269,7 +278,7 @@ components:
         - AB_PRUNE
         - DIVIDE_AND_CONQUER
         - MACHINE_LEARNING
-        - REINFORCEMENT_LEARNING
+        - MONTE_CARLO_VALUE
         - Q_LEARNING
         - DL4J_NEURAL_NETWORK
     PlayerRegion:
@@ -350,6 +359,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EvalParamsRanking'
+    LearningProgress:
+      properties:
+        gamesCompleted:
+          type: integer
+        gamesTotal:
+          type: integer
+        done:
+          type: boolean
     BonusTileUsage:
       enum:
         - MONEY
