@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * Value-network strategy trained by Monte Carlo self-play.
+ * Monte-Carlo value strategy trained by self-play.
  *
  * <p><b>Inference:</b> for every legal move, applies it to a copy of the state and evaluates
  * the resulting position with the neural network from the current player's perspective.
@@ -23,7 +23,7 @@ import java.util.Random;
  * headless game when this strategy's name appears in {@code PlayConfig.learningModels}.
  * For each non-initialisation turn in the trajectory we train
  * {@code V(nextState, mover) → mover's actual final influence / 50}.
- * The updated model is persisted after every game via {@link RlModelService}.
+ * The updated model is persisted after every game via {@link MonteCarloValueModelService}.
  *
  * <p><b>Params supported via {@code Map<String,Object>}:</b>
  * <ul>
@@ -31,18 +31,18 @@ import java.util.Random;
  *       by the controller when this strategy is listed in {@code learningModels}</li>
  * </ul>
  */
-@Component("REINFORCEMENT_LEARNING")
-public class ReinforcementLearningStrategy implements TrainableStrategy {
+@Component("MONTE_CARLO_VALUE")
+public class MonteCarloValueStrategy implements TrainableStrategy {
 
     private static final float DEFAULT_LEARNING_RATE = 0.001f;
 
     private final FranchiseService franchiseService;
-    private final RlModelService modelService;
+    private final MonteCarloValueModelService modelService;
     private final StateEncoder encoder = new StateEncoder();
     private final Random random = new Random();
 
-    public ReinforcementLearningStrategy(@Lazy FranchiseService franchiseService,
-                                          RlModelService modelService) {
+    public MonteCarloValueStrategy(@Lazy FranchiseService franchiseService,
+                                   MonteCarloValueModelService modelService) {
         this.franchiseService = franchiseService;
         this.modelService = modelService;
     }
@@ -84,7 +84,7 @@ public class ReinforcementLearningStrategy implements TrainableStrategy {
     /**
      * Trains the value network on the completed game trajectory.
      *
-     * <p>Only trains on turns where the mover is using the REINFORCEMENT_LEARNING strategy
+     * <p>Only trains on turns where the mover is using the MONTE_CARLO_VALUE strategy
      * (i.e. skips opponent turns — training on random/other-strategy turns injects noise).
      *
      * <p>The training target blends two signals based on game progress
@@ -114,7 +114,7 @@ public class ReinforcementLearningStrategy implements TrainableStrategy {
             if (before.isInitialization()) continue;
             PlayerColor mover = before.getPlayers().get(before.getCurrentPlayerIndex());
             // Only train on turns where this strategy was in control
-            if (!"REINFORCEMENT_LEARNING".equals(playerStrategies.get(mover))) continue;
+            if (!"MONTE_CARLO_VALUE".equals(playerStrategies.get(mover))) continue;
 
             GameState after = trajectory.get(i + 1);
 

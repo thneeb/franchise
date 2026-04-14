@@ -278,7 +278,7 @@ components:
         - AB_PRUNE
         - DIVIDE_AND_CONQUER
         - MACHINE_LEARNING
-        - REINFORCEMENT_LEARNING
+        - MONTE_CARLO_VALUE
         - Q_LEARNING
         - DL4J_NEURAL_NETWORK
     PlayerRegion:

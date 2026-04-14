@@ -16,25 +16,26 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Load order:
  * <ol>
- *   <li>Filesystem — {@code src/main/resources/rl/rl-model-{n}p.json} (written by training runs)</li>
+ *   <li>Filesystem — {@code src/main/resources/monte-carlo-value/monte-carlo-value-model-{n}p.json}
+ *       (written by training runs)</li>
  *   <li>Classpath fallback — pre-trained model bundled with the application</li>
  *   <li>Fresh He-initialised network if neither exists</li>
  * </ol>
  *
- * <p>Models are saved to {@code src/main/resources/rl/} so they survive server restarts
+ * <p>Models are saved to {@code src/main/resources/monte-carlo-value/} so they survive server restarts
  * and can be committed alongside source, mirroring how calibration configs are stored.
  */
 @Service
-class RlModelService {
+class MonteCarloValueModelService {
 
-    private static final String RL_DIR = "rl/";
+    private static final String MODEL_DIR = "monte-carlo-value/";
     private static final int HIDDEN1 = 256;
     private static final int HIDDEN2 = 128;
 
     private final ObjectMapper objectMapper;
     private final Map<Integer, NeuralNetwork> cache = new ConcurrentHashMap<>();
 
-    RlModelService(ObjectMapper objectMapper) {
+    MonteCarloValueModelService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
@@ -58,7 +59,7 @@ class RlModelService {
             }
         }
         try {
-            ClassPathResource resource = new ClassPathResource(RL_DIR + fileName(numPlayers));
+            ClassPathResource resource = new ClassPathResource(MODEL_DIR + fileName(numPlayers));
             if (!resource.exists()) return null;
             return objectMapper.readValue(resource.getInputStream(), NeuralNetwork.class);
         } catch (IOException e) {
@@ -79,16 +80,16 @@ class RlModelService {
             cache.put(numPlayers, network);
         } catch (IOException e) {
             throw new IllegalStateException(
-                    "Failed to save RL model for " + numPlayers + " players", e);
+                    "Failed to save Monte Carlo value model for " + numPlayers + " players", e);
         }
     }
 
     private File modelFile(int numPlayers) {
         String projectRoot = System.getProperty("user.dir");
-        return new File(projectRoot, "src/main/resources/" + RL_DIR + fileName(numPlayers));
+        return new File(projectRoot, "src/main/resources/" + MODEL_DIR + fileName(numPlayers));
     }
 
     private static String fileName(int numPlayers) {
-        return "rl-model-" + numPlayers + "p.json";
+        return "monte-carlo-value-model-" + numPlayers + "p.json";
     }
 }

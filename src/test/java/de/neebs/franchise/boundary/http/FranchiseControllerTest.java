@@ -151,6 +151,7 @@ class FranchiseControllerTest {
         // After BLUE's init draw, RED is next
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(jsonPath("$.next").value("RED"))
+                .andExpect(jsonPath("$.cities[?(@.city=='INDIANAPOLIS')].closed").value(true))
                 .andExpect(jsonPath("$.cities[?(@.city=='INDIANAPOLIS')].branches[0]").value("BLUE"));
     }
 
@@ -208,6 +209,22 @@ class FranchiseControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(
                         containsString("Only one city allowed during initialization")));
+    }
+
+    @Test
+    void createDraw_initDraw_occupiedTown_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"RED","extension":["INDIANAPOLIS"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        containsString("town is already occupied")));
     }
 
     @Test
@@ -710,6 +727,21 @@ class FranchiseControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(containsString("Strategy not implemented")));
+    }
+
+    @Test
+    void computerDraw_wrongPlayer_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"BLUE","strategy":"MONTE_CARLO_VALUE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Not your turn"));
     }
 
     @Test

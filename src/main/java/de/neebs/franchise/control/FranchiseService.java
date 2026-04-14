@@ -382,13 +382,25 @@ public class FranchiseService {
 
     // Selects and applies the best draw for the current player using the given strategy
     public DrawResult computeBestDraw(String gameId, String strategyName, Map<String, Object> params) {
+        return computeBestDraw(gameId, null, strategyName, params);
+    }
+
+    public DrawResult computeBestDraw(String gameId, PlayerColor requestedPlayer,
+                                      String strategyName, Map<String, Object> params) {
         GameStrategy strategy = strategies.get(strategyName);
         if (strategy == null) {
             throw new IllegalArgumentException("Strategy not implemented: " + strategyName);
         }
         GameState state = getGame(gameId);
         PlayerColor player = currentPlayer(state);
+        if (requestedPlayer != null && requestedPlayer != player) {
+            throw new IllegalArgumentException("Not your turn");
+        }
         DrawRecord best = strategy.selectDraw(state, player, params);
+        if (best.getColor() != player) {
+            throw new IllegalArgumentException(
+                    "Strategy selected a draw for " + best.getColor() + " but current player is " + player);
+        }
         return applyDraw(gameId, best);
     }
 
@@ -570,6 +582,10 @@ public class FranchiseService {
         if (town.getSize() != 1) {
             throw new IllegalArgumentException(
                     "Only small towns (size 1) are allowed during initialization");
+        }
+        if (state.getCityBranches().get(town)[0] != null) {
+            throw new IllegalArgumentException(
+                    "Cannot initialize in " + town.getName() + ": town is already occupied");
         }
         if (state.getClosedCities().contains(town)) {
             throw new IllegalArgumentException(
@@ -786,6 +802,9 @@ public class FranchiseService {
 
     private void placeInSlot(GameState state, City city, int slot, PlayerColor player) {
         state.getCityBranches().get(city)[slot] = player;
+        if (city.getSize() == 1) {
+            state.getClosedCities().add(city);
+        }
     }
 
     private void placeNextClockwise(GameState state, PlayerColor player, City city,
@@ -794,6 +813,9 @@ public class FranchiseService {
         for (int i = 0; i < slots.length; i++) {
             if (slots[i] == null) {
                 slots[i] = player;
+                if (city.getSize() == 1) {
+                    state.getClosedCities().add(city);
+                }
                 checkCityScoring(state, city, log);
                 return;
             }

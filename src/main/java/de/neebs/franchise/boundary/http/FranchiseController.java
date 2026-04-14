@@ -66,7 +66,9 @@ public class FranchiseController implements FranchiseApi {
         } else if (draw instanceof ComputerPlayer cp) {
             String strategyName = cp.getStrategy().name();
             Map<String, Object> params = cp.getParams() != null ? cp.getParams() : Map.of();
-            DrawResult result = franchiseService.computeBestDraw(gameId, strategyName, params);
+            de.neebs.franchise.entity.PlayerColor requestedPlayer =
+                    de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name());
+            DrawResult result = franchiseService.computeBestDraw(gameId, requestedPlayer, strategyName, params);
             return ResponseEntity.ok(toExtendedDraw(result));
         }
         return ResponseEntity.badRequest().build();
