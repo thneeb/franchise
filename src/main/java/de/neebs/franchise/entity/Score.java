@@ -17,4 +17,13 @@ public class Score {
 
     public int getIncome() { return income; }
     public void setIncome(int income) { this.income = income; }
+
+    public Score copy() {
+        Score s = new Score();
+        s.influence = this.influence;
+        s.bonusTiles = this.bonusTiles;
+        s.money = this.money;
+        s.income = this.income;
+        return s;
+    }
 }

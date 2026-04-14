@@ -108,6 +108,21 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/GameField'
+  /franchise/calibrate:
+    post:
+      operationId: calibrateStrategy
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/CalibrateConfig'
+      responses:
+        '200':
+          description: Returns the calibration result with parameter rankings
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/CalibrationResult'
   /franchise/{gameId}/learnings:
     parameters:
       -
@@ -125,13 +140,22 @@ paths:
               $ref: '#/components/schemas/PlayConfig'
       responses:
         '200':
-          description: Returns the played draw
+          description: Returns win counts per player
           content:
             'application/json':
               schema:
                   type: array
                   items:
                     $ref: '#/components/schemas/PlayerColorAndInteger'
+    get:
+      operationId: getLearningProgress
+      responses:
+        '200':
+          description: Returns current progress of a running or completed learning session for this game ID
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LearningProgress'
 components:
   schemas:
     ExtendedDraw:
@@ -247,13 +271,14 @@ components:
         - COMPUTER
     ComputerStrategy:
       enum:
+        - RANDOM
         - MONTE_CARLO_TREE_SEARCH
         - MAXIMAX
         - MINIMAX
         - AB_PRUNE
         - DIVIDE_AND_CONQUER
         - MACHINE_LEARNING
-        - REINFORCEMENT_LEARNING
+        - MONTE_CARLO_VALUE
         - Q_LEARNING
         - DL4J_NEURAL_NETWORK
     PlayerRegion:
@@ -293,6 +318,55 @@ components:
           $ref: '#/components/schemas/PlayerColor'
         value:
           type: integer
+    CalibrateConfig:
+      properties:
+        playerCount:
+          type: integer
+          default: 2
+        gamesPerMatchup:
+          type: integer
+          default: 4
+        depth:
+          type: integer
+          default: 2
+    EvalParams:
+      properties:
+        earlyIncomeWeight:
+          type: integer
+        lateIncomeWeight:
+          type: integer
+    EvalParamsRanking:
+      allOf:
+        - $ref: '#/components/schemas/EvalParams'
+        - properties:
+            wins:
+              type: integer
+            winRate:
+              type: number
+    CalibrationResult:
+      properties:
+        playerCount:
+          type: integer
+        calibratedAt:
+          type: string
+        gamesPerMatchup:
+          type: integer
+        depth:
+          type: integer
+        winner:
+          $ref: '#/components/schemas/EvalParams'
+        rankings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvalParamsRanking'
+    LearningProgress:
+      properties:
+        gamesCompleted:
+          type: integer
+        gamesTotal:
+          type: integer
+        done:
+          type: boolean
     BonusTileUsage:
       enum:
         - MONEY

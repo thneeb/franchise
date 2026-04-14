@@ -194,11 +194,11 @@ After the region scoring, place the region tile on the **leftmost free space** o
 
 **Region track influence bonuses** (left to right, positions 1–10):
 
-| Position | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9* | 10* |
-|----------|---|---|---|---|---|---|---|---|----|-----|
-| Influence| 3 | 3 | 2 | 2 | 3 | 4 | 3 | 2 | 0  | 0   |
+| Position | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8* | 9* | 10* |
+|----------|---|---|---|---|---|---|---|----|----|-----|
+| Influence| 3 | 3 | 2 | 2 | 3 | 4 | 3 | 2  | 0  | 0   |
 
-> *Positions 9 and 10 are the **red zone**: once any region tile reaches the red zone, the game ends after the current player finishes their turn.
+> *Positions 8, 9, and 10 are the **red zone**: once any region tile reaches the red zone (position 8 or beyond), the game ends after the current player finishes their turn. If multiple regions are scored in one turn, all of them are resolved before the game ends.
 
 > Multiple region scorings in one turn are handled in any order.
 
@@ -224,7 +224,7 @@ Take $10 from the bank.
 
 ## Game End
 
-**End condition:** After any player's turn, if at least one region tile is in the **red zone** of the region track, the game ends immediately.
+**End condition:** After any player's turn, once any region tile has reached the **red zone** (position 8 or beyond on the region track), the game ends immediately. If multiple regions are scored in the same turn, all are fully resolved before the game ends. (In 2- or 3-player games, the 3 inactive tiles are pre-placed at positions 1–3, so the game ends when the 5th active region is scored, placing the 8th tile total at position 8.)
 
 > Rare exception: The game also ends if all players consecutively skip expansion.
 

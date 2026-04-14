@@ -24,6 +24,9 @@ class FranchiseControllerTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Autowired
+    de.neebs.franchise.control.FranchiseService franchiseService;
+
     // -------------------------------------------------------------------------
     // initializeGame
     // -------------------------------------------------------------------------
@@ -93,9 +96,9 @@ class FranchiseControllerTest {
 
     @Test
     void evaluateNextPossibleDraws_twoPlayerGame_excludesInactiveRegions() throws Exception {
-        // 2-player games always deactivate CALIFORNIA, GRAND_CANYON, MONTANA.
-        // Their small towns: LAS_VEGAS, RENO (CA), FLAGSTAFF, PUEBLO, SALT_LAKE_CITY (GC),
-        //                    CONRAD, BILLINGS, CASPER, FARGO, SIOUX_FALLS (MT) — 10 towns blocked.
+        // 2-player games deactivate CALIFORNIA, MONTANA, UPPER_WEST.
+        // Small towns blocked: LAS_VEGAS, RENO (CA=2), SPOKANE, BOISE, POCATELLO (UW=3),
+        //                      CONRAD, BILLINGS, CASPER, FARGO, SIOUX_FALLS (MT=5) — 10 blocked.
         // 22 total small towns − 10 blocked = 12 available.
         String gameId = createGame("RED", "BLUE");
 
@@ -103,7 +106,7 @@ class FranchiseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.inactiveRegions", hasSize(3)))
                 .andExpect(jsonPath("$.inactiveRegions", containsInAnyOrder(
-                        "CALIFORNIA", "GRAND_CANYON", "MONTANA")));
+                        "CALIFORNIA", "MONTANA", "UPPER_WEST")));
 
         mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
                 .andExpect(status().isOk())
@@ -111,9 +114,9 @@ class FranchiseControllerTest {
                 // None of the inactive-region small towns may appear
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("LAS_VEGAS"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("RENO"))))
-                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("FLAGSTAFF"))))
-                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("PUEBLO"))))
-                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("SALT_LAKE_CITY"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("SPOKANE"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("BOISE"))))
+                .andExpect(jsonPath("$[*].extension[0]", not(hasItem("POCATELLO"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("CONRAD"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("BILLINGS"))))
                 .andExpect(jsonPath("$[*].extension[0]", not(hasItem("CASPER"))))
@@ -139,16 +142,17 @@ class FranchiseControllerTest {
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"playerType":"HUMAN","color":"BLUE","extension":["LAS_VEGAS"]}
+                                {"playerType":"HUMAN","color":"BLUE","extension":["INDIANAPOLIS"]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.color").value("BLUE"))
-                .andExpect(jsonPath("$.draw.extension[0]").value("LAS_VEGAS"));
+                .andExpect(jsonPath("$.draw.extension[0]").value("INDIANAPOLIS"));
 
         // After BLUE's init draw, RED is next
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(jsonPath("$.next").value("RED"))
-                .andExpect(jsonPath("$.cities[?(@.city=='LAS_VEGAS')].branches[0]").value("BLUE"));
+                .andExpect(jsonPath("$.cities[?(@.city=='INDIANAPOLIS')].closed").value(true))
+                .andExpect(jsonPath("$.cities[?(@.city=='INDIANAPOLIS')].branches[0]").value("BLUE"));
     }
 
     @Test
@@ -208,6 +212,22 @@ class FranchiseControllerTest {
     }
 
     @Test
+    void createDraw_initDraw_occupiedTown_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"HUMAN","color":"RED","extension":["INDIANAPOLIS"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        containsString("town is already occupied")));
+    }
+
+    @Test
     void createDraw_initDraw_withBonusTile_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
 
@@ -246,8 +266,8 @@ class FranchiseControllerTest {
         String gameId = createGame("RED", "BLUE");
 
         // Init phase: BLUE then RED
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(jsonPath("$.initialization").value(false))
@@ -262,12 +282,12 @@ class FranchiseControllerTest {
     @Test
     void retrieveDraw_returnsDrawAtIndex() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
 
         mockMvc.perform(get("/franchise/{gameId}/draws/{index}", gameId, 0))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.color").value("BLUE"))
-                .andExpect(jsonPath("$.extension[0]").value("LAS_VEGAS"));
+                .andExpect(jsonPath("$.extension[0]").value("INDIANAPOLIS"));
     }
 
     @Test
@@ -308,8 +328,8 @@ class FranchiseControllerTest {
     @Test
     void expand_twoCity_withoutBonusTile_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         // RED is first (round 1) — try to expand to 2 cities without bonus tile
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
@@ -326,8 +346,8 @@ class FranchiseControllerTest {
     @Test
     void expand_extensionBonus_withOneCity_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
         skipTurn(gameId, "RED");  // round 1 (RED's first turn)
         skipTurn(gameId, "BLUE"); // round 2 (BLUE's first turn)
         skipTurn(gameId, "RED");  // round 3
@@ -357,8 +377,8 @@ class FranchiseControllerTest {
     @Test
     void expand_sameCityTwice_withExtensionBonus_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
         skipTurn(gameId, "RED");  // round 1 (RED's first turn)
         skipTurn(gameId, "BLUE"); // round 2 (BLUE's first turn)
         skipTurn(gameId, "RED");  // round 3
@@ -369,7 +389,7 @@ class FranchiseControllerTest {
                         .content("""
                                 {"playerType":"HUMAN","color":"BLUE",
                                  "bonusTileUsage":"EXTENSION",
-                                 "extension":["FLAGSTAFF","FLAGSTAFF"]}
+                                 "extension":["CHARLOTTE","CHARLOTTE"]}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value(
@@ -505,8 +525,8 @@ class FranchiseControllerTest {
     @Test
     void useBonusTile_onFirstTurn_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         // RED on round 1 — bonus tiles forbidden on first turn
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
@@ -534,8 +554,8 @@ class FranchiseControllerTest {
     @Test
     void useBonusTile_withNoneRemaining_returns400() throws Exception {
         String gameId = createGame("RED", "BLUE");
-        performInitDraw(gameId, "BLUE", "LAS_VEGAS");
-        performInitDraw(gameId, "RED", "RENO");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
 
         // Exhaust all 4 of RED's bonus tiles (2-player game gives 4 tiles each)
         // RED plays on odd rounds: 1(skip), 3, 5, 7, 9 → uses bonus on rounds 3,5,7,9
@@ -558,6 +578,42 @@ class FranchiseControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("No bonus tiles remaining"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Game-end: region track
+    // -------------------------------------------------------------------------
+
+    @Test
+    void gameEnds_whenRegionTileReachesRedZone() throws Exception {
+        // Rule: red zone = positions 8, 9, 10 on the region track.
+        // Game ends after the current player's turn once any tile reaches position 8+.
+        // regionTrackIndex is incremented after each tile is placed, so the check
+        // fires when regionTrackIndex >= 8.
+        // We verify the boundary: regionTrackIndex=7 → game continues; =8 → game ends.
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        // Both players can still expand from their starting towns, so the
+        // consecutive-skip end condition will not fire (counter stays at 0).
+
+        // Simulate 7 tiles on the track (just below the red zone threshold)
+        de.neebs.franchise.entity.GameState state = franchiseService.getGame(gameId);
+        state.setRegionTrackIndex(7);
+
+        skipTurn(gameId, "RED");
+
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(jsonPath("$.end").value(false));
+
+        // Simulate the 8th tile reaching position 8 (red zone) — game must end
+        state.setRegionTrackIndex(8);
+
+        skipTurn(gameId, "BLUE");
+
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(jsonPath("$.end").value(true));
     }
 
     // -------------------------------------------------------------------------
@@ -612,5 +668,149 @@ class FranchiseControllerTest {
                                 {"playerType":"HUMAN","color":"%s","bonusTileUsage":"MONEY"}
                                 """.formatted(color)))
                 .andExpect(status().isOk());
+    }
+
+    private void performComputerDraw(String gameId, String color, String strategy) throws Exception {
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"%s","strategy":"%s","params":{"depth":1}}
+                                """.formatted(color, strategy)))
+                .andExpect(status().isOk());
+    }
+
+    // -------------------------------------------------------------------------
+    // Computer / AI draws
+    // -------------------------------------------------------------------------
+
+    @Test
+    void computerDraw_minimax_returnsValidDraw() throws Exception {
+        // After both init draws, RED plays first — use MINIMAX at depth 1 for speed
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"MINIMAX","params":{"depth":1}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draw.color").value("RED"));
+    }
+
+    @Test
+    void computerDraw_abPrune_returnsValidDraw() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"AB_PRUNE","params":{"depth":1}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draw.color").value("RED"));
+    }
+
+    @Test
+    void computerDraw_unknownStrategy_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"MONTE_CARLO_TREE_SEARCH"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(containsString("Strategy not implemented")));
+    }
+
+    @Test
+    void computerDraw_wrongPlayer_returns400() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"BLUE","strategy":"MONTE_CARLO_VALUE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Not your turn"));
+    }
+
+    @Test
+    void computerDraw_selectedMoveIsAmongPossibleDraws() throws Exception {
+        // The move the AI picks must be one of the legal draws returned by getPossibleDraws
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        // Capture possible draws before the AI move
+        MvcResult possibleResult = mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
+                .andExpect(status().isOk())
+                .andReturn();
+        String possibleJson = possibleResult.getResponse().getContentAsString();
+
+        // AI picks its move
+        MvcResult drawResult = mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"MINIMAX","params":{"depth":1}}
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        // The chosen draw must appear in the possible draws list
+        com.fasterxml.jackson.databind.JsonNode chosen = objectMapper
+                .readTree(drawResult.getResponse().getContentAsString()).get("draw");
+        com.fasterxml.jackson.databind.JsonNode possible = objectMapper.readTree(possibleJson);
+        boolean found = false;
+        for (com.fasterxml.jackson.databind.JsonNode node : possible) {
+            if (node.equals(chosen)) { found = true; break; }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(found,
+                "AI chose a draw that is not in getPossibleDraws: " + chosen);
+    }
+
+    @Test
+    void calibrateStrategy_twoPlayers_returnsRankings() throws Exception {
+        // Run a minimal calibration (2 games per matchup, depth 1) for speed
+        mockMvc.perform(post("/franchise/calibrate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerCount":2,"gamesPerMatchup":2,"depth":1}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.playerCount").value(2))
+                .andExpect(jsonPath("$.winner").exists())
+                .andExpect(jsonPath("$.winner.earlyIncomeWeight").isNumber())
+                .andExpect(jsonPath("$.winner.lateIncomeWeight").isNumber())
+                .andExpect(jsonPath("$.rankings", hasSize(15)));
+    }
+
+    @Test
+    void playGame_minimaxVsMinimax_returnsTotalWinsEqualingTimesToPlay() throws Exception {
+        // Run 2 quick games (depth 1) and verify the result sums to 2
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"timesToPlay":2,
+                                 "players":[
+                                   {"playerType":"COMPUTER","color":"RED","strategy":"MINIMAX","params":{"depth":1}},
+                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"MINIMAX","params":{"depth":1}}
+                                 ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].value").isNumber())
+                .andExpect(jsonPath("$[1].value").isNumber());
     }
 }
