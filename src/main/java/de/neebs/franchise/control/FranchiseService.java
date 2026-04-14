@@ -448,7 +448,7 @@ public class FranchiseService {
                     for (String modelName : learningModels) {
                         GameStrategy strategy = strategies.get(modelName);
                         if (strategy instanceof TrainableStrategy ts) {
-                            ts.onGameComplete(trajectory, finalScores);
+                            ts.onGameComplete(trajectory, finalScores, playerStrategies);
                         }
                     }
                 }

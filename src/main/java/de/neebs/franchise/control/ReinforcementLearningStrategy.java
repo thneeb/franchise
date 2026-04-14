@@ -34,7 +34,6 @@ import java.util.Random;
 public class ReinforcementLearningStrategy implements TrainableStrategy {
 
     private static final float DEFAULT_LEARNING_RATE = 0.001f;
-    private static final float SCORE_NORMALIZER = 50.0f;
 
     private final FranchiseService franchiseService;
     private final RlModelService modelService;
@@ -84,19 +83,27 @@ public class ReinforcementLearningStrategy implements TrainableStrategy {
     /**
      * Trains the value network on the completed game trajectory.
      *
-     * <p>For each non-initialisation turn {@code i} in the trajectory:
+     * <p>Only trains on turns where the mover is using the REINFORCEMENT_LEARNING strategy
+     * (i.e. skips opponent turns — training on random/other-strategy turns injects noise).
+     *
+     * <p>For each eligible turn {@code i} in the trajectory:
      * <pre>
-     *   mover    = player whose turn it was at trajectory[i]
+     *   mover     = player whose turn it was at trajectory[i]
      *   nextState = trajectory[i + 1]   (state after mover's action)
-     *   target   = finalScores[mover] / SCORE_NORMALIZER
-     *   train:   V(encode(nextState, mover)) → target
+     *   target    = 1.0 if mover won, 0.5 if tied, 0.0 if mover lost
+     *   train:    V(encode(nextState, mover)) → target
      * </pre>
+     * Win/loss signal is used instead of the raw score because the absolute score difference
+     * between winning and losing is too small (typically 0.1–0.2 on a 0–1 scale) to overcome
+     * Monte Carlo variance within a reasonable number of training games.
+     *
      * Synchronised to prevent concurrent training corruption when multiple
      * HTTP requests trigger parallel game loops.
      */
     @Override
     public synchronized void onGameComplete(List<GameState> trajectory,
-                                             Map<PlayerColor, Integer> finalScores) {
+                                             Map<PlayerColor, Integer> finalScores,
+                                             Map<PlayerColor, String> playerStrategies) {
         if (trajectory.size() < 2) return;
         int numPlayers = trajectory.get(0).getPlayers().size();
         NeuralNetwork network = modelService.getOrCreate(numPlayers);
@@ -105,10 +112,25 @@ public class ReinforcementLearningStrategy implements TrainableStrategy {
             GameState before = trajectory.get(i);
             if (before.isInitialization()) continue;
             PlayerColor mover = before.getPlayers().get(before.getCurrentPlayerIndex());
+            // Only train on turns where this strategy was in control
+            if (!"REINFORCEMENT_LEARNING".equals(playerStrategies.get(mover))) continue;
             Integer finalScore = finalScores.get(mover);
             if (finalScore == null) continue;
+
+            int maxOpponentScore = finalScores.entrySet().stream()
+                    .filter(e -> !e.getKey().equals(mover))
+                    .mapToInt(Map.Entry::getValue)
+                    .max().orElse(0);
+            float target;
+            if (finalScore > maxOpponentScore) {
+                target = 1.0f;
+            } else if (finalScore == maxOpponentScore) {
+                target = 0.5f;
+            } else {
+                target = 0.0f;
+            }
+
             GameState after = trajectory.get(i + 1);
-            float target = finalScore / SCORE_NORMALIZER;
             network.train(encoder.encode(after, mover), target, DEFAULT_LEARNING_RATE);
         }
 
