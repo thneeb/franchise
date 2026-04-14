@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -104,8 +105,31 @@ public class FranchiseController implements FranchiseApi {
 
         int times = playConfig.getTimesToPlay() != null ? playConfig.getTimesToPlay() : 1;
 
+        Set<String> learningModels = playConfig.getLearningModels() != null
+                ? playConfig.getLearningModels().stream()
+                        .map(ComputerStrategy::name)
+                        .collect(Collectors.toSet())
+                : Set.of();
+
+        // Auto-inject epsilon=0.3 for any player whose strategy is being trained,
+        // unless the caller has already set a value.
+        if (!learningModels.isEmpty()) {
+            playerParams = playerParams.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            e -> {
+                                String strat = strategies.get(e.getKey());
+                                if (learningModels.contains(strat) && !e.getValue().containsKey("epsilon")) {
+                                    Map<String, Object> merged = new java.util.LinkedHashMap<>(e.getValue());
+                                    merged.put("epsilon", 0.3);
+                                    return merged;
+                                }
+                                return e.getValue();
+                            }));
+        }
+
         Map<de.neebs.franchise.entity.PlayerColor, Integer> wins =
-                franchiseService.runGames(players, strategies, playerParams, times);
+                franchiseService.runGames(players, strategies, playerParams, learningModels, times);
 
         List<PlayerColorAndInteger> result = wins.entrySet().stream()
                 .map(e -> new PlayerColorAndInteger()

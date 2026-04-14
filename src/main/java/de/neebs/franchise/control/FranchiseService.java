@@ -398,29 +398,46 @@ public class FranchiseService {
     public Map<PlayerColor, Integer> runGames(List<PlayerColor> players,
                                               Map<PlayerColor, String> playerStrategies,
                                               Map<PlayerColor, Map<String, Object>> playerParams,
+                                              Set<String> learningModels,
                                               int timesToPlay) {
         Map<PlayerColor, Integer> wins = new EnumMap<>(PlayerColor.class);
         players.forEach(p -> wins.put(p, 0));
+        boolean training = !learningModels.isEmpty();
 
         for (int i = 0; i < timesToPlay; i++) {
             String tmpId = UUID.randomUUID().toString();
             GameState state = buildInitialState(tmpId, players);
             games.put(tmpId, state);
+            List<GameState> trajectory = training ? new ArrayList<>() : null;
             int turns = 0;
             try {
                 while (!games.get(tmpId).isEnd() && turns < MAX_HEADLESS_GAME_TURNS) {
+                    if (training) trajectory.add(games.get(tmpId).deepCopy());
                     PlayerColor current = currentPlayer(games.get(tmpId));
                     String strategyName = playerStrategies.get(current);
                     Map<String, Object> params = playerParams.getOrDefault(current, Map.of());
                     computeBestDraw(tmpId, strategyName, params);
                     turns++;
                 }
+                if (training) trajectory.add(games.get(tmpId).deepCopy());
+
                 PlayerColor winner = games.get(tmpId).getScores().entrySet().stream()
                         .max(Map.Entry.comparingByValue(
                                 Comparator.comparingInt(s -> s.getInfluence())))
                         .map(Map.Entry::getKey)
                         .orElseThrow();
                 wins.merge(winner, 1, Integer::sum);
+
+                if (training) {
+                    Map<PlayerColor, Integer> finalScores = new EnumMap<>(PlayerColor.class);
+                    games.get(tmpId).getScores().forEach((p, s) -> finalScores.put(p, s.getInfluence()));
+                    for (String modelName : learningModels) {
+                        GameStrategy strategy = strategies.get(modelName);
+                        if (strategy instanceof TrainableStrategy ts) {
+                            ts.onGameComplete(trajectory, finalScores);
+                        }
+                    }
+                }
             } finally {
                 games.remove(tmpId);
             }
