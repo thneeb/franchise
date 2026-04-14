@@ -140,13 +140,35 @@ paths:
               $ref: '#/components/schemas/PlayConfig'
       responses:
         '200':
-          description: Returns the played draw
+          description: Returns win counts per player. When learningModels is non-empty, the X-Learning-Run-Id header contains a run ID that can be polled at GET /franchise/learnings/progress/{runId}.
+          headers:
+            X-Learning-Run-Id:
+              description: Opaque run ID for polling training progress. Present only when learningModels is non-empty.
+              schema:
+                type: string
           content:
             'application/json':
               schema:
                   type: array
                   items:
                     $ref: '#/components/schemas/PlayerColorAndInteger'
+  /franchise/learnings/progress/{runId}:
+    parameters:
+      -
+        name: runId
+        schema:
+          type: string
+        required: true
+        in: path
+    get:
+      operationId: getLearningProgress
+      responses:
+        '200':
+          description: Returns current progress of the given learning run
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LearningProgress'
 components:
   schemas:
     ExtendedDraw:
@@ -350,6 +372,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EvalParamsRanking'
+    LearningProgress:
+      properties:
+        runId:
+          type: string
+        gamesCompleted:
+          type: integer
+        gamesTotal:
+          type: integer
+        done:
+          type: boolean
     BonusTileUsage:
       enum:
         - MONEY

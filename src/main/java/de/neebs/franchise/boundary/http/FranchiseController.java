@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -128,14 +129,22 @@ public class FranchiseController implements FranchiseApi {
                             }));
         }
 
+        String runId = learningModels.isEmpty() ? null : UUID.randomUUID().toString();
+
         Map<de.neebs.franchise.entity.PlayerColor, Integer> wins =
-                franchiseService.runGames(players, strategies, playerParams, learningModels, times);
+                franchiseService.runGames(players, strategies, playerParams, learningModels, runId, times);
 
         List<PlayerColorAndInteger> result = wins.entrySet().stream()
                 .map(e -> new PlayerColorAndInteger()
                         .color(PlayerColor.valueOf(e.getKey().name()))
                         .value(e.getValue()))
                 .collect(Collectors.toList());
+
+        if (runId != null) {
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("X-Learning-Run-Id", runId);
+            return ResponseEntity.ok().headers(headers).body(result);
+        }
         return ResponseEntity.ok(result);
     }
 
@@ -266,6 +275,21 @@ public class FranchiseController implements FranchiseApi {
         }
 
         return record;
+    }
+
+    @Override
+    public ResponseEntity<de.neebs.franchise.boundary.http.model.LearningProgress> getLearningProgress(String runId) {
+        de.neebs.franchise.entity.LearningProgress progress = franchiseService.getLearningProgress(runId);
+        if (progress == null) {
+            return ResponseEntity.notFound().build();
+        }
+        de.neebs.franchise.boundary.http.model.LearningProgress model =
+                new de.neebs.franchise.boundary.http.model.LearningProgress()
+                        .runId(progress.getRunId())
+                        .gamesCompleted(progress.getGamesCompleted())
+                        .gamesTotal(progress.getGamesTotal())
+                        .done(progress.isDone());
+        return ResponseEntity.ok(model);
     }
 
     @Override

@@ -15,6 +15,7 @@ public class FranchiseService {
     private static final int RED_ZONE_INDEX = 8; // red zone = positions 8-10 (1-indexed); game ends when 1st tile reaches position 8, i.e. regionTrackIndex reaches 8
 
     private final Map<String, GameState> games = new ConcurrentHashMap<>();
+    private final Map<String, de.neebs.franchise.entity.LearningProgress> learningRuns = new ConcurrentHashMap<>();
 
     // Injected lazily to avoid circular dependency (strategies → service → strategies)
     private Map<String, GameStrategy> strategies = Map.of();
@@ -395,14 +396,26 @@ public class FranchiseService {
     // Maximum turns before a headless game is cut short (same guard as in CalibrationService)
     private static final int MAX_HEADLESS_GAME_TURNS = 120;
 
+    public de.neebs.franchise.entity.LearningProgress getLearningProgress(String runId) {
+        return learningRuns.get(runId);
+    }
+
     public Map<PlayerColor, Integer> runGames(List<PlayerColor> players,
                                               Map<PlayerColor, String> playerStrategies,
                                               Map<PlayerColor, Map<String, Object>> playerParams,
                                               Set<String> learningModels,
+                                              String runId,
                                               int timesToPlay) {
         Map<PlayerColor, Integer> wins = new EnumMap<>(PlayerColor.class);
         players.forEach(p -> wins.put(p, 0));
         boolean training = !learningModels.isEmpty();
+
+        de.neebs.franchise.entity.LearningProgress progress = null;
+        if (runId != null) {
+            progress = new de.neebs.franchise.entity.LearningProgress(runId, timesToPlay);
+            learningRuns.put(runId, progress);
+        }
+        final de.neebs.franchise.entity.LearningProgress progressRef = progress;
 
         for (int i = 0; i < timesToPlay; i++) {
             String tmpId = UUID.randomUUID().toString();
@@ -427,6 +440,7 @@ public class FranchiseService {
                         .map(Map.Entry::getKey)
                         .orElseThrow();
                 wins.merge(winner, 1, Integer::sum);
+                if (progressRef != null) progressRef.increment();
 
                 if (training) {
                     Map<PlayerColor, Integer> finalScores = new EnumMap<>(PlayerColor.class);

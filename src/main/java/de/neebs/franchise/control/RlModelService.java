@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -66,9 +68,14 @@ class RlModelService {
 
     synchronized void save(NeuralNetwork network, int numPlayers) {
         try {
-            File file = modelFile(numPlayers);
-            file.getParentFile().mkdirs();
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, network);
+            File target = modelFile(numPlayers);
+            target.getParentFile().mkdirs();
+            // Write to a temp file first, then rename atomically.
+            // A kill between write and rename leaves the old file intact.
+            File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(tmp, network);
+            Files.move(tmp.toPath(), target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             cache.put(numPlayers, network);
         } catch (IOException e) {
             throw new IllegalStateException(
