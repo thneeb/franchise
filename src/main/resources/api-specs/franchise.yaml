@@ -361,10 +361,16 @@ components:
             $ref: '#/components/schemas/EvalParamsRanking'
     LearningProgress:
       properties:
+        runId:
+          type: string
         gamesCompleted:
           type: integer
         gamesTotal:
           type: integer
+        wins:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColorAndInteger'
         done:
           type: boolean
     BonusTileUsage:

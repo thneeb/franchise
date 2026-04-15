@@ -424,7 +424,7 @@ public class FranchiseService {
 
         de.neebs.franchise.entity.LearningProgress progress = null;
         if (runId != null) {
-            progress = new de.neebs.franchise.entity.LearningProgress(runId, timesToPlay);
+            progress = new de.neebs.franchise.entity.LearningProgress(runId, timesToPlay, players);
             learningRuns.put(runId, progress);
         }
         final de.neebs.franchise.entity.LearningProgress progressRef = progress;
@@ -452,7 +452,7 @@ public class FranchiseService {
                         .map(Map.Entry::getKey)
                         .orElseThrow();
                 wins.merge(winner, 1, Integer::sum);
-                if (progressRef != null) progressRef.increment();
+                if (progressRef != null) progressRef.increment(winner);
 
                 if (training) {
                     Map<PlayerColor, Integer> finalScores = new EnumMap<>(PlayerColor.class);

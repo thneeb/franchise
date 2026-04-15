@@ -49,6 +49,10 @@ public class NeuralNetwork {
         return matVecAdd(l3w, a2, l3b)[0];
     }
 
+    public float predictClamped(float[] input) {
+        return clamp01(predict(input));
+    }
+
     // -------------------------------------------------------------------------
     // Training — single SGD step, MSE loss
     // -------------------------------------------------------------------------
@@ -108,6 +112,12 @@ public class NeuralNetwork {
         }
     }
 
+    public void trainBatch(Iterable<ValueTrainingSample> samples, float lr) {
+        for (ValueTrainingSample sample : samples) {
+            train(sample.input(), sample.target(), lr);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Linear algebra helpers
     // -------------------------------------------------------------------------
@@ -131,6 +141,10 @@ public class NeuralNetwork {
             r[i] = x[i] > 0 ? x[i] : 0;
         }
         return r;
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0.0f, Math.min(1.0f, value));
     }
 
     private static float[][] heInit(Random rng, int out, int in) {

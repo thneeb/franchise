@@ -280,8 +280,14 @@ public class FranchiseController implements FranchiseApi {
         }
         de.neebs.franchise.boundary.http.model.LearningProgress model =
                 new de.neebs.franchise.boundary.http.model.LearningProgress()
+                        .runId(progress.getRunId())
                         .gamesCompleted(progress.getGamesCompleted())
                         .gamesTotal(progress.getGamesTotal())
+                        .wins(progress.getWins().entrySet().stream()
+                                .map(e -> new PlayerColorAndInteger()
+                                        .color(PlayerColor.valueOf(e.getKey().name()))
+                                        .value(e.getValue()))
+                                .collect(Collectors.toList()))
                         .done(progress.isDone());
         return ResponseEntity.ok(model);
     }

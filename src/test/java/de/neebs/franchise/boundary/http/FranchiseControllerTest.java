@@ -813,4 +813,28 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$[0].value").isNumber())
                 .andExpect(jsonPath("$[1].value").isNumber());
     }
+
+    @Test
+    void getLearningProgress_includesPerPlayerWins() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"timesToPlay":1,
+                                 "learningModels":["MONTE_CARLO_VALUE"],
+                                 "players":[
+                                   {"playerType":"COMPUTER","color":"RED","strategy":"MONTE_CARLO_VALUE"},
+                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"MINIMAX","params":{"depth":1}}
+                                 ]}
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").value(gameId))
+                .andExpect(jsonPath("$.wins", hasSize(2)))
+                .andExpect(jsonPath("$.wins[*].color", containsInAnyOrder("RED", "BLUE")))
+                .andExpect(jsonPath("$.wins[*].value", everyItem(isA(Number.class))));
+    }
 }
