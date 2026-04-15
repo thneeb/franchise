@@ -35,6 +35,21 @@ paths:
         required: true
         in: path
     get:
+      parameters:
+        -
+          name: sections
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - cities
+                - players
+                - regions
+                - influence
+                - winners
       operationId: retrieveGameBoard
       responses:
         '200':
@@ -161,15 +176,45 @@ components:
     ExtendedDraw:
       properties:
         draw:
-          $ref: '#/components/schemas/HumanDraw'
+          $ref: '#/components/schemas/ExecutedDraw'
         info:
-          properties:
-            income:
-              type: integer
-            influence:
-              type: array
-              items:
-                type: string
+          $ref: '#/components/schemas/ExtendedDrawInfo'
+        money:
+          type: integer
+        end:
+          type: boolean
+        winners:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColor'
+    ExecutedDraw:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        playerType:
+          $ref: '#/components/schemas/PlayerType'
+        extension:
+          type: array
+          items:
+            $ref: '#/components/schemas/City'
+        increase:
+          type: array
+          items:
+            $ref: '#/components/schemas/City'
+        bonusTileUsage:
+          $ref: '#/components/schemas/BonusTileUsage'
+    ExtendedDrawInfo:
+      properties:
+        income:
+          type: integer
+        influence:
+          type: array
+          items:
+            type: string
+        influenceByRound:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfluenceRound'
     GameField:
       properties:
         id:
@@ -204,6 +249,34 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Region'
+        openRegions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Region'
+        influenceByRound:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfluenceRound'
+        winners:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColor'
+    InfluenceEntry:
+      properties:
+        player:
+          $ref: '#/components/schemas/PlayerColor'
+        points:
+          type: integer
+        reason:
+          type: string
+    InfluenceRound:
+      properties:
+        round:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/InfluenceEntry'
     CityPlate:
       properties:
         city:

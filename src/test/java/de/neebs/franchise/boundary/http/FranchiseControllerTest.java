@@ -71,13 +71,29 @@ class FranchiseControllerTest {
         mockMvc.perform(get("/franchise/{gameId}", gameId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(gameId))
-                .andExpect(jsonPath("$.initialization").value(true));
+                .andExpect(jsonPath("$.initialization").value(true))
+                .andExpect(jsonPath("$.openRegions", hasSize(7)))
+                .andExpect(jsonPath("$.influenceByRound", hasSize(0)))
+                .andExpect(jsonPath("$.winners", hasSize(0)));
     }
 
     @Test
     void retrieveGameBoard_unknownId_returns404() throws Exception {
         mockMvc.perform(get("/franchise/{gameId}", "does-not-exist"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void retrieveGameBoard_sectionsFilter_returnsOnlyRequestedSections() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(get("/franchise/{gameId}", gameId).queryParam("sections", "winners,influence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.winners", hasSize(0)))
+                .andExpect(jsonPath("$.influenceByRound", hasSize(0)))
+                .andExpect(jsonPath("$.cities", hasSize(0)))
+                .andExpect(jsonPath("$.players", hasSize(0)))
+                .andExpect(jsonPath("$.openRegions", hasSize(0)));
     }
 
     // -------------------------------------------------------------------------
@@ -130,6 +146,16 @@ class FranchiseControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void evaluateNextPossibleDraws_whenGameEnded_returnsEmptyList() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        franchiseService.getGame(gameId).setEnd(true);
+
+        mockMvc.perform(get("/franchise/{gameId}/draws", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
     // -------------------------------------------------------------------------
     // createDraw — initialization phase
     // -------------------------------------------------------------------------
@@ -146,7 +172,11 @@ class FranchiseControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.color").value("BLUE"))
-                .andExpect(jsonPath("$.draw.extension[0]").value("INDIANAPOLIS"));
+                .andExpect(jsonPath("$.draw.extension[0]").value("INDIANAPOLIS"))
+                .andExpect(jsonPath("$.money").value(4))
+                .andExpect(jsonPath("$.end").value(false))
+                .andExpect(jsonPath("$.winners", hasSize(0)))
+                .andExpect(jsonPath("$.info.influenceByRound", hasSize(0)));
 
         // After BLUE's init draw, RED is next
         mockMvc.perform(get("/franchise/{gameId}", gameId))
@@ -613,7 +643,22 @@ class FranchiseControllerTest {
         skipTurn(gameId, "BLUE");
 
         mockMvc.perform(get("/franchise/{gameId}", gameId))
-                .andExpect(jsonPath("$.end").value(true));
+                .andExpect(jsonPath("$.end").value(true))
+                .andExpect(jsonPath("$.winners", is(not(empty()))))
+                .andExpect(jsonPath("$.influenceByRound", is(not(empty()))));
+    }
+
+    @Test
+    void retrieveGameBoard_listsAllWinners_whenInfluenceIsTied() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        de.neebs.franchise.entity.GameState state = franchiseService.getGame(gameId);
+        state.setEnd(true);
+        state.getScores().get(de.neebs.franchise.entity.PlayerColor.RED).setInfluence(12);
+        state.getScores().get(de.neebs.franchise.entity.PlayerColor.BLUE).setInfluence(12);
+
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.winners", containsInAnyOrder("RED", "BLUE")));
     }
 
     // -------------------------------------------------------------------------
@@ -696,7 +741,8 @@ class FranchiseControllerTest {
                                 {"playerType":"COMPUTER","color":"RED","strategy":"MINIMAX","params":{"depth":1}}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.draw.color").value("RED"));
+                .andExpect(jsonPath("$.draw.color").value("RED"))
+                .andExpect(jsonPath("$.draw.playerType").value("COMPUTER"));
     }
 
     @Test
@@ -769,6 +815,7 @@ class FranchiseControllerTest {
         // The chosen draw must appear in the possible draws list
         com.fasterxml.jackson.databind.JsonNode chosen = objectMapper
                 .readTree(drawResult.getResponse().getContentAsString()).get("draw");
+        ((com.fasterxml.jackson.databind.node.ObjectNode) chosen).put("playerType", "HUMAN");
         com.fasterxml.jackson.databind.JsonNode possible = objectMapper.readTree(possibleJson);
         boolean found = false;
         for (com.fasterxml.jackson.databind.JsonNode node : possible) {

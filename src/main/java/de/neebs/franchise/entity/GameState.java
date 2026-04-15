@@ -20,6 +20,7 @@ public class GameState {
     private int regionTrackIndex;
     private List<Region> inactiveRegions;
     private List<DrawRecord> drawHistory;
+    private List<InfluenceEvent> influenceHistory;
     private int consecutiveSkipsWithoutExpansion;
 
     public String getId() { return id; }
@@ -67,6 +68,9 @@ public class GameState {
     public List<DrawRecord> getDrawHistory() { return drawHistory; }
     public void setDrawHistory(List<DrawRecord> drawHistory) { this.drawHistory = drawHistory; }
 
+    public List<InfluenceEvent> getInfluenceHistory() { return influenceHistory; }
+    public void setInfluenceHistory(List<InfluenceEvent> influenceHistory) { this.influenceHistory = influenceHistory; }
+
     public int getConsecutiveSkipsWithoutExpansion() { return consecutiveSkipsWithoutExpansion; }
     public void setConsecutiveSkipsWithoutExpansion(int consecutiveSkipsWithoutExpansion) {
         this.consecutiveSkipsWithoutExpansion = consecutiveSkipsWithoutExpansion;
@@ -99,6 +103,7 @@ public class GameState {
 
         // DrawRecord fields are set once and never mutated — shallow copy is safe
         copy.drawHistory = new ArrayList<>(this.drawHistory);
+        copy.influenceHistory = new ArrayList<>(this.influenceHistory);
         return copy;
     }
 }

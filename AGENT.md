@@ -20,6 +20,10 @@ Controller classes should use a API first approach with an generated interface w
 Write test classes for complex code.
 When we discover a problem during our journey always write a regression test, that we don't hit the same problem again.
 
+##
+Start the server: ```mvn spring-boot:start```
+Stop the server: ```mvn spring-boot:stop```
+
 ## Key source files
 
 - `src/main/resources/api-specs/franchise.yaml`: OpenAPI spec. Drives the generated controller interface in `de.neebs.franchise.boundary.http`.

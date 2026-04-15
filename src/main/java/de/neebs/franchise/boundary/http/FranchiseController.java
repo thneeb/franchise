@@ -8,6 +8,7 @@ import de.neebs.franchise.entity.DrawResult;
 import de.neebs.franchise.entity.EvalParams;
 import de.neebs.franchise.entity.EvalParamsRanking;
 import de.neebs.franchise.entity.GameState;
+import de.neebs.franchise.entity.InfluenceEvent;
 import de.neebs.franchise.entity.Score;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -15,7 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,16 +39,16 @@ public class FranchiseController implements FranchiseApi {
                 .map(p -> de.neebs.franchise.entity.PlayerColor.valueOf(p.name()))
                 .collect(Collectors.toList());
         GameState state = franchiseService.initGame(players);
-        GameField gameField = toGameField(state);
+        GameField gameField = toGameField(state, Set.of());
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.LOCATION, "/franchise/" + state.getId());
         return ResponseEntity.status(HttpStatus.CREATED).headers(headers).body(gameField);
     }
 
     @Override
-    public ResponseEntity<GameField> retrieveGameBoard(String gameId) {
+    public ResponseEntity<GameField> retrieveGameBoard(String gameId, List<String> sections) {
         GameState state = franchiseService.getGame(gameId);
-        return ResponseEntity.ok(toGameField(state));
+        return ResponseEntity.ok(toGameField(state, parseSections(sections)));
     }
 
     @Override
@@ -62,14 +65,14 @@ public class FranchiseController implements FranchiseApi {
         if (draw instanceof HumanDraw humanDraw) {
             DrawRecord record = toDrawRecord(humanDraw);
             DrawResult result = franchiseService.applyDraw(gameId, record);
-            return ResponseEntity.ok(toExtendedDraw(result));
+            return ResponseEntity.ok(toExtendedDraw(result, PlayerType.HUMAN));
         } else if (draw instanceof ComputerPlayer cp) {
             String strategyName = cp.getStrategy().name();
             Map<String, Object> params = cp.getParams() != null ? cp.getParams() : Map.of();
             de.neebs.franchise.entity.PlayerColor requestedPlayer =
                     de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name());
             DrawResult result = franchiseService.computeBestDraw(gameId, requestedPlayer, strategyName, params);
-            return ResponseEntity.ok(toExtendedDraw(result));
+            return ResponseEntity.ok(toExtendedDraw(result, PlayerType.COMPUTER));
         }
         return ResponseEntity.badRequest().build();
     }
@@ -83,7 +86,7 @@ public class FranchiseController implements FranchiseApi {
     @Override
     public ResponseEntity<GameField> undoDraws(String gameId, Integer index) {
         GameState state = franchiseService.undoDraws(gameId, index);
-        return ResponseEntity.ok(toGameField(state));
+        return ResponseEntity.ok(toGameField(state, Set.of()));
     }
 
     @Override
@@ -147,7 +150,7 @@ public class FranchiseController implements FranchiseApi {
     // Mapping: GameState → GameField
     // -------------------------------------------------------------------------
 
-    private GameField toGameField(GameState state) {
+    private GameField toGameField(GameState state, Set<String> sections) {
         de.neebs.franchise.entity.PlayerColor currentPlayerColor =
                 state.getPlayers().get(state.getCurrentPlayerIndex());
         Score currentScore = state.getScores().get(currentPlayerColor);
@@ -156,53 +159,80 @@ public class FranchiseController implements FranchiseApi {
                 && state.getRound() > 1
                 && currentScore.getBonusTiles() > 0;
 
-        Map<de.neebs.franchise.entity.City, Integer> expansionCosts =
-                franchiseService.computeExpansionCosts(state.getId());
-
-        List<CityPlate> cityPlates = Arrays.stream(de.neebs.franchise.entity.City.values())
-                .map(city -> toCityPlate(state, city, expansionCosts.get(city)))
-                .collect(Collectors.toList());
-
-        List<Player> players = state.getPlayers().stream()
-                .map(p -> {
-                    Score s = state.getScores().get(p);
-                    return new Player()
-                            .color(PlayerColor.valueOf(p.name()))
-                            .money(s.getMoney())
-                            .influence(s.getInfluence())
-                            .income(s.getIncome())
-                            .bonusTiles(s.getBonusTiles());
-                })
-                .collect(Collectors.toList());
-
-        List<PlayerRegion> firstCities = state.getRegionFirstScorer().entrySet().stream()
-                .map(e -> new PlayerRegion()
-                        .color(PlayerColor.valueOf(e.getValue().name()))
-                        .region(Region.valueOf(e.getKey().name())))
-                .collect(Collectors.toList());
-
-        List<Region> closedRegions = state.getClosedRegions().stream()
-                .filter(r -> state.getInactiveRegions() == null || !state.getInactiveRegions().contains(r))
-                .map(r -> Region.valueOf(r.name()))
-                .collect(Collectors.toList());
-
-        List<Region> inactiveRegions = state.getInactiveRegions() == null ? List.of() :
-                state.getInactiveRegions().stream()
-                        .map(r -> Region.valueOf(r.name()))
-                        .collect(Collectors.toList());
-
-        return new GameField()
+        GameField gameField = new GameField()
                 .id(state.getId())
                 .end(state.isEnd())
                 .initialization(state.isInitialization())
                 .bonusTileUsable(bonusTileUsable)
                 .round(state.getRound())
-                .next(PlayerColor.valueOf(currentPlayerColor.name()))
-                .cities(cityPlates)
-                .players(players)
-                .firstCities(firstCities)
-                .closedRegions(closedRegions)
-                .inactiveRegions(inactiveRegions);
+                .next(PlayerColor.valueOf(currentPlayerColor.name()));
+
+        if (includeSection(sections, "cities")) {
+            Map<de.neebs.franchise.entity.City, Integer> expansionCosts =
+                    franchiseService.computeExpansionCosts(state.getId());
+            List<CityPlate> cityPlates = Arrays.stream(de.neebs.franchise.entity.City.values())
+                    .map(city -> toCityPlate(state, city, expansionCosts.get(city)))
+                    .collect(Collectors.toList());
+            gameField.setCities(cityPlates);
+        }
+
+        if (includeSection(sections, "players")) {
+            List<Player> players = state.getPlayers().stream()
+                    .map(p -> {
+                        Score s = state.getScores().get(p);
+                        return new Player()
+                                .color(PlayerColor.valueOf(p.name()))
+                                .money(s.getMoney())
+                                .influence(s.getInfluence())
+                                .income(s.getIncome())
+                                .bonusTiles(s.getBonusTiles());
+                    })
+                    .collect(Collectors.toList());
+            gameField.setPlayers(players);
+        }
+
+        if (includeSection(sections, "regions")) {
+            List<PlayerRegion> firstCities = state.getRegionFirstScorer().entrySet().stream()
+                    .map(e -> new PlayerRegion()
+                            .color(PlayerColor.valueOf(e.getValue().name()))
+                            .region(Region.valueOf(e.getKey().name())))
+                    .collect(Collectors.toList());
+
+            List<Region> closedRegions = state.getClosedRegions().stream()
+                    .filter(r -> state.getInactiveRegions() == null || !state.getInactiveRegions().contains(r))
+                    .map(r -> Region.valueOf(r.name()))
+                    .collect(Collectors.toList());
+
+            List<Region> inactiveRegions = state.getInactiveRegions() == null ? List.of() :
+                    state.getInactiveRegions().stream()
+                            .map(r -> Region.valueOf(r.name()))
+                            .collect(Collectors.toList());
+
+            List<Region> openRegions = Arrays.stream(de.neebs.franchise.entity.Region.values())
+                    .filter(r -> !state.getClosedRegions().contains(r))
+                    .filter(r -> state.getInactiveRegions() == null || !state.getInactiveRegions().contains(r))
+                    .map(r -> Region.valueOf(r.name()))
+                    .toList();
+
+            gameField.setFirstCities(firstCities);
+            gameField.setClosedRegions(closedRegions);
+            gameField.setInactiveRegions(inactiveRegions);
+            gameField.setOpenRegions(openRegions);
+        }
+
+        if (includeSection(sections, "influence")) {
+            gameField.setInfluenceByRound(toInfluenceRounds(state.getInfluenceHistory()));
+        }
+
+        if (includeSection(sections, "winners")) {
+            gameField.setWinners(state.isEnd()
+                    ? franchiseService.getWinners(state).stream()
+                    .map(p -> PlayerColor.valueOf(p.name()))
+                    .toList()
+                    : List.of());
+        }
+
+        return gameField;
     }
 
     private CityPlate toCityPlate(GameState state, de.neebs.franchise.entity.City city,
@@ -244,7 +274,29 @@ public class FranchiseController implements FranchiseApi {
         if (record.getBonusTileUsage() != null) {
             draw.setBonusTileUsage(BonusTileUsage.valueOf(record.getBonusTileUsage().name()));
         }
+        return draw;
+    }
 
+    private ExecutedDraw toExecutedDraw(DrawRecord record, PlayerType playerType) {
+        ExecutedDraw draw = new ExecutedDraw();
+        draw.setColor(PlayerColor.valueOf(record.getColor().name()));
+        draw.setPlayerType(playerType);
+
+        if (record.getExtension() != null) {
+            draw.setExtension(record.getExtension().stream()
+                    .map(c -> City.valueOf(c.name()))
+                    .collect(Collectors.toList()));
+        }
+
+        if (record.getIncrease() != null) {
+            draw.setIncrease(record.getIncrease().stream()
+                    .map(c -> City.valueOf(c.name()))
+                    .collect(Collectors.toList()));
+        }
+
+        if (record.getBonusTileUsage() != null) {
+            draw.setBonusTileUsage(BonusTileUsage.valueOf(record.getBonusTileUsage().name()));
+        }
         return draw;
     }
 
@@ -305,14 +357,51 @@ public class FranchiseController implements FranchiseApi {
     // Mapping: DrawResult → ExtendedDraw
     // -------------------------------------------------------------------------
 
-    private ExtendedDraw toExtendedDraw(DrawResult result) {
+    private ExtendedDraw toExtendedDraw(DrawResult result, PlayerType playerType) {
         ExtendedDrawInfo info = new ExtendedDrawInfo()
                 .income(result.getIncome())
-                .influence(result.getInfluenceLog());
+                .influence(result.getInfluenceLog())
+                .influenceByRound(toInfluenceRounds(result.getInfluenceEvents()));
 
         return new ExtendedDraw()
-                .draw(toHumanDraw(result.getDraw()))
-                .info(info);
+                .draw(toExecutedDraw(result.getDraw(), playerType))
+                .info(info)
+                .money(result.getMoney())
+                .end(result.isEnd())
+                .winners(result.isEnd()
+                        ? result.getWinners().stream()
+                                .map(p -> PlayerColor.valueOf(p.name()))
+                                .toList()
+                        : List.of());
+    }
+
+    private List<InfluenceRound> toInfluenceRounds(List<InfluenceEvent> events) {
+        Map<Integer, List<InfluenceEntry>> grouped = new LinkedHashMap<>();
+        for (InfluenceEvent event : events) {
+            grouped.computeIfAbsent(event.getRound(), ignored -> new ArrayList<>())
+                    .add(new InfluenceEntry()
+                            .player(PlayerColor.valueOf(event.getPlayer().name()))
+                            .points(event.getPoints())
+                            .reason(event.getReason()));
+        }
+        return grouped.entrySet().stream()
+                .map(entry -> new InfluenceRound()
+                        .round(entry.getKey())
+                        .entries(entry.getValue()))
+                .toList();
+    }
+
+    private Set<String> parseSections(List<String> sections) {
+        if (sections == null || sections.isEmpty()) return Set.of();
+        return sections.stream()
+                .flatMap(value -> Arrays.stream(value.split(",")))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .collect(Collectors.toSet());
+    }
+
+    private boolean includeSection(Set<String> sections, String section) {
+        return sections.isEmpty() || sections.contains(section);
     }
 
     // -------------------------------------------------------------------------

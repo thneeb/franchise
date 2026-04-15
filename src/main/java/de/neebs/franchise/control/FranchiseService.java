@@ -57,16 +57,19 @@ public class FranchiseService {
         }
 
         List<String> influenceLog = new ArrayList<>();
+        List<InfluenceEvent> influenceEvents = new ArrayList<>();
         int income = 0;
 
         if (state.isInitialization()) {
             income = applyInitDraw(state, player, draw);
         } else {
-            income = applyNormalDraw(state, player, draw, influenceLog);
+            income = applyNormalDraw(state, player, draw, influenceLog, influenceEvents);
         }
 
         state.getDrawHistory().add(draw);
-        return new DrawResult(draw, income, influenceLog);
+        state.getInfluenceHistory().addAll(influenceEvents);
+        return new DrawResult(draw, income, influenceLog, influenceEvents,
+                state.getScores().get(player).getMoney(), state.isEnd(), getWinners(state));
     }
 
     public List<DrawRecord> getPossibleDraws(String gameId) {
@@ -76,6 +79,7 @@ public class FranchiseService {
 
     // Core move-generation logic operating directly on a GameState (no HashMap lookup).
     private List<DrawRecord> getPossibleDrawsFromState(GameState state) {
+        if (state.isEnd()) return List.of();
         PlayerColor player = currentPlayer(state);
         List<DrawRecord> draws = new ArrayList<>();
 
@@ -207,6 +211,7 @@ public class FranchiseService {
      * This keeps the branching factor at O(N) ≈ 30-60, making minimax tractable.
      */
     public List<DrawRecord> getPossibleDrawsForAI(GameState state) {
+        if (state.isEnd()) return List.of();
         PlayerColor player = currentPlayer(state);
         List<DrawRecord> draws = new ArrayList<>();
 
@@ -340,39 +345,41 @@ public class FranchiseService {
 
         // Phase 4A: Place extension branches
         List<String> log = new ArrayList<>();
+        List<InfluenceEvent> events = new ArrayList<>();
         for (City target : extensions) {
-            placeNextClockwise(state, player, target, log);
+            placeNextClockwise(state, player, target, log, events);
             state.getSupply().merge(player, -1, Integer::sum);
         }
 
         // Phase 4B: Place increase branches
         if (bonus == BonusTileUsage.INCREASE && !increases.isEmpty()) {
-            placeNextClockwise(state, player, increases.get(0), log);
-            placeNextClockwise(state, player, increases.get(0), log);
+            placeNextClockwise(state, player, increases.get(0), log, events);
+            placeNextClockwise(state, player, increases.get(0), log, events);
         } else {
             for (City city : increases) {
-                placeNextClockwise(state, player, city, log);
+                placeNextClockwise(state, player, city, log, events);
             }
         }
 
         // Phase 5: Region scoring
-        checkAllRegions(state, player, log);
+        checkAllRegions(state, player, log, events);
 
         // Game end check (region track reached red zone)
         if (state.getRegionTrackIndex() >= RED_ZONE_INDEX) {
-            doFinalScoring(state);
+            doFinalScoring(state, log, events);
             state.setEnd(true);
         }
 
         // Game end check (all players unable to expand consecutively)
         if (!state.isEnd()) {
-            updateConsecutiveSkipCounter(state, player, extensions, availableMoney);
+            updateConsecutiveSkipCounter(state, player, extensions, availableMoney, log, events);
         }
 
         // Advance turn
         state.setCurrentPlayerIndex(
                 (state.getCurrentPlayerIndex() + 1) % state.getPlayers().size());
         state.setRound(state.getRound() + 1);
+        state.getInfluenceHistory().addAll(events);
     }
 
     // Runs calibration tournament and persists the result
@@ -511,6 +518,7 @@ public class FranchiseService {
         state.setClosedRegions(new ArrayList<>());
         state.setRegionFirstScorer(new EnumMap<>(Region.class));
         state.setDrawHistory(new ArrayList<>());
+        state.setInfluenceHistory(new ArrayList<>());
 
         // 2- or 3-player adjustment: three fixed regions are inactive.
         List<Region> inactive = new ArrayList<>();
@@ -616,7 +624,7 @@ public class FranchiseService {
     // -------------------------------------------------------------------------
 
     private int applyNormalDraw(GameState state, PlayerColor player, DrawRecord draw,
-                                 List<String> log) {
+                                 List<String> log, List<InfluenceEvent> events) {
         BonusTileUsage bonus = draw.getBonusTileUsage();
         List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
         List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
@@ -737,34 +745,34 @@ public class FranchiseService {
 
         // Phase 4A: Place expansion branches clockwise
         for (City target : extensions) {
-            placeNextClockwise(state, player, target, log);
+            placeNextClockwise(state, player, target, log, events);
             state.getSupply().merge(player, -1, Integer::sum);
         }
 
         // Phase 4B: Place increase branches clockwise
         if (bonus == BonusTileUsage.INCREASE && !increases.isEmpty()) {
             // Double-increase: place 2 branches in the same city (supply already decremented)
-            placeNextClockwise(state, player, increases.get(0), log);
-            placeNextClockwise(state, player, increases.get(0), log);
+            placeNextClockwise(state, player, increases.get(0), log, events);
+            placeNextClockwise(state, player, increases.get(0), log, events);
         } else {
             for (City city : increases) {
-                placeNextClockwise(state, player, city, log);
+                placeNextClockwise(state, player, city, log, events);
                 // supply already decremented in Phase 3
             }
         }
 
         // Phase 5: Region scoring
-        checkAllRegions(state, player, log);
+        checkAllRegions(state, player, log, events);
 
         // Game end check (region track reached red zone)
         if (state.getRegionTrackIndex() >= RED_ZONE_INDEX) {
-            doFinalScoring(state);
+            doFinalScoring(state, log, events);
             state.setEnd(true);
         }
 
         // Game end check (all players unable to expand consecutively)
         if (!state.isEnd()) {
-            updateConsecutiveSkipCounter(state, player, extensions, baseAvailableMoney);
+            updateConsecutiveSkipCounter(state, player, extensions, baseAvailableMoney, log, events);
         }
 
         // Advance turn
@@ -808,7 +816,7 @@ public class FranchiseService {
     }
 
     private void placeNextClockwise(GameState state, PlayerColor player, City city,
-                                     List<String> log) {
+                                     List<String> log, List<InfluenceEvent> events) {
         PlayerColor[] slots = state.getCityBranches().get(city);
         for (int i = 0; i < slots.length; i++) {
             if (slots[i] == null) {
@@ -816,7 +824,7 @@ public class FranchiseService {
                 if (city.getSize() == 1) {
                     state.getClosedCities().add(city);
                 }
-                checkCityScoring(state, city, log);
+                checkCityScoring(state, city, log, events);
                 return;
             }
         }
@@ -826,7 +834,8 @@ public class FranchiseService {
     // City scoring
     // -------------------------------------------------------------------------
 
-    private void checkCityScoring(GameState state, City city, List<String> log) {
+    private void checkCityScoring(GameState state, City city, List<String> log,
+                                  List<InfluenceEvent> events) {
         if (city.getSize() <= 1) return; // towns score only at game end via doFinalScoring
         if (state.getClosedCities().contains(city)) return;
 
@@ -854,12 +863,12 @@ public class FranchiseService {
         boolean full = filled == total;
         if (majority == null && !full) return;
 
-        scoreCity(state, city, majority, counts, slots, log);
+        scoreCity(state, city, majority, counts, slots, log, events);
     }
 
     private void scoreCity(GameState state, City city, PlayerColor majority,
                             Map<PlayerColor, Integer> counts, PlayerColor[] slots,
-                            List<String> log) {
+                            List<String> log, List<InfluenceEvent> events) {
         int cityValue = city.getSize();
         PlayerColor winner;
         int influence;
@@ -886,9 +895,7 @@ public class FranchiseService {
             influence = cityValue / 2;
         }
 
-        state.getScores().get(winner).setInfluence(
-                state.getScores().get(winner).getInfluence() + influence);
-        log.add(winner.name() + " scores " + influence + " in " + city.getName());
+        awardInfluence(state, winner, influence, "City " + city.getName(), log, events);
 
         // Return branches to supply: winner keeps 1, others keep none
         for (Map.Entry<PlayerColor, Integer> e : counts.entrySet()) {
@@ -913,7 +920,8 @@ public class FranchiseService {
     // Region scoring
     // -------------------------------------------------------------------------
 
-    private void checkAllRegions(GameState state, PlayerColor trigger, List<String> log) {
+    private void checkAllRegions(GameState state, PlayerColor trigger, List<String> log,
+                                 List<InfluenceEvent> events) {
         for (Region region : Region.values()) {
             if (state.getClosedRegions().contains(region)) continue;
 
@@ -928,12 +936,12 @@ public class FranchiseService {
                     .allMatch(c -> state.getClosedCities().contains(c));
             if (!allCitiesScored) continue;
 
-            scoreRegion(state, region, trigger, log);
+            scoreRegion(state, region, trigger, log, events);
         }
     }
 
     private void scoreRegion(GameState state, Region region, PlayerColor trigger,
-                              List<String> log) {
+                              List<String> log, List<InfluenceEvent> events) {
         // Count branches per player across all cities in region
         Map<PlayerColor, Integer> counts = new EnumMap<>(PlayerColor.class);
         for (City city : region.getCities()) {
@@ -951,9 +959,9 @@ public class FranchiseService {
         PlayerColor tieBreaker = state.getRegionFirstScorer().get(region);
         int playerCount = state.getPlayers().size();
 
-        awardRegionRank(state, region, sorted, 0, 1, tieBreaker, log);
+        awardRegionRank(state, region, sorted, 0, 1, tieBreaker, log, events);
         if (playerCount > 2) {
-            awardRegionRank(state, region, sorted, 1, 2, tieBreaker, log);
+            awardRegionRank(state, region, sorted, 1, 2, tieBreaker, log, events);
         }
         // Third value for all others with >= 1 branch
         int thirdValue = region.getByProfitLevel(3);
@@ -962,9 +970,7 @@ public class FranchiseService {
             // skip 1st and 2nd place players
             if (isRank(sorted, p, 0, tieBreaker) || isRank(sorted, p, 1, tieBreaker)) continue;
             if (e.getValue() > 0) {
-                state.getScores().get(p).setInfluence(
-                        state.getScores().get(p).getInfluence() + thirdValue);
-                log.add(p.name() + " scores " + thirdValue + " (3rd) in " + region.getName());
+                awardInfluence(state, p, thirdValue, region.getName() + " (3rd)", log, events);
             }
         }
 
@@ -973,9 +979,7 @@ public class FranchiseService {
         if (state.getRegionTrackIndex() < track.size()) {
             int bonus = track.get(state.getRegionTrackIndex());
             if (bonus > 0) {
-                state.getScores().get(trigger).setInfluence(
-                        state.getScores().get(trigger).getInfluence() + bonus);
-                log.add(trigger.name() + " scores " + bonus + " track bonus");
+                awardInfluence(state, trigger, bonus, "Region track bonus", log, events);
             }
         }
 
@@ -987,15 +991,14 @@ public class FranchiseService {
     private void awardRegionRank(GameState state, Region region,
                                   List<Map.Entry<PlayerColor, Integer>> sorted,
                                   int rank, int profitLevel,
-                                  PlayerColor tieBreaker, List<String> log) {
+                                  PlayerColor tieBreaker, List<String> log,
+                                  List<InfluenceEvent> events) {
         if (sorted.size() <= rank) return;
         PlayerColor winner = resolveRankWinner(sorted, rank, tieBreaker);
         if (winner == null) return;
         int points = region.getByProfitLevel(profitLevel);
-        state.getScores().get(winner).setInfluence(
-                state.getScores().get(winner).getInfluence() + points);
-        log.add(winner.name() + " scores " + points + " (" + (rank == 0 ? "1st" : "2nd")
-                + ") in " + region.getName());
+        awardInfluence(state, winner, points,
+                region.getName() + " (" + (rank == 0 ? "1st" : "2nd") + ")", log, events);
     }
 
     private PlayerColor resolveRankWinner(List<Map.Entry<PlayerColor, Integer>> sorted,
@@ -1029,7 +1032,8 @@ public class FranchiseService {
      * have afforded at least one expansion (i.e. they are saving up).
      */
     private void updateConsecutiveSkipCounter(GameState state, PlayerColor player,
-                                               List<City> extensions, int availableMoney) {
+                                               List<City> extensions, int availableMoney,
+                                               List<String> log, List<InfluenceEvent> events) {
         if (!extensions.isEmpty()) {
             state.setConsecutiveSkipsWithoutExpansion(0);
             return;
@@ -1045,29 +1049,53 @@ public class FranchiseService {
             int count = state.getConsecutiveSkipsWithoutExpansion() + 1;
             state.setConsecutiveSkipsWithoutExpansion(count);
             if (count >= state.getPlayers().size()) {
-                doFinalScoring(state);
+                doFinalScoring(state, log, events);
                 state.setEnd(true);
             }
         }
     }
 
-    private void doFinalScoring(GameState state) {
+    private void doFinalScoring(GameState state, List<String> log, List<InfluenceEvent> events) {
         // +1 per branch in small town (skip neutral-color fillers used for inactive regions)
         for (City town : City.getTowns()) {
             PlayerColor occupant = state.getCityBranches().get(town)[0];
             if (occupant != null && state.getScores().containsKey(occupant)) {
-                state.getScores().get(occupant).setInfluence(
-                        state.getScores().get(occupant).getInfluence() + 1);
+                awardInfluence(state, occupant, 1, "Small town " + town.getName(), log, events);
             }
         }
         // +1 per $3
-        for (Score s : state.getScores().values()) {
-            s.setInfluence(s.getInfluence() + s.getMoney() / 3);
+        for (Map.Entry<PlayerColor, Score> entry : state.getScores().entrySet()) {
+            int points = entry.getValue().getMoney() / 3;
+            if (points > 0) {
+                awardInfluence(state, entry.getKey(), points, "Cash conversion", log, events);
+            }
         }
         // +4 per unused bonus tile
-        for (Score s : state.getScores().values()) {
-            s.setInfluence(s.getInfluence() + s.getBonusTiles() * 4);
+        for (Map.Entry<PlayerColor, Score> entry : state.getScores().entrySet()) {
+            int points = entry.getValue().getBonusTiles() * 4;
+            if (points > 0) {
+                awardInfluence(state, entry.getKey(), points, "Unused bonus tiles", log, events);
+            }
         }
+    }
+
+    public List<PlayerColor> getWinners(GameState state) {
+        int best = state.getScores().values().stream()
+                .mapToInt(Score::getInfluence)
+                .max()
+                .orElse(Integer.MIN_VALUE);
+        return state.getScores().entrySet().stream()
+                .filter(e -> e.getValue().getInfluence() == best)
+                .map(Map.Entry::getKey)
+                .toList();
+    }
+
+    private void awardInfluence(GameState state, PlayerColor player, int points, String reason,
+                                List<String> log, List<InfluenceEvent> events) {
+        state.getScores().get(player).setInfluence(
+                state.getScores().get(player).getInfluence() + points);
+        log.add(player.name() + " scores " + points + " in " + reason);
+        events.add(new InfluenceEvent(state.getRound(), player, points, reason));
     }
 
     // -------------------------------------------------------------------------
