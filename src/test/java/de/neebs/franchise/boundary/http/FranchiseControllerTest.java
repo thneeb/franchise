@@ -715,7 +715,7 @@ class FranchiseControllerTest {
     }
 
     @Test
-    void computerDraw_unknownStrategy_returns400() throws Exception {
+    void computerDraw_monteCarloTreeSearch_returnsValidDraw() throws Exception {
         String gameId = createGame("RED", "BLUE");
         performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
         performInitDraw(gameId, "RED", "MEMPHIS");
@@ -723,10 +723,10 @@ class FranchiseControllerTest {
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"playerType":"COMPUTER","color":"RED","strategy":"MONTE_CARLO_TREE_SEARCH"}
+                                {"playerType":"COMPUTER","color":"RED","strategy":"MONTE_CARLO_TREE_SEARCH","params":{"simulations":8}}
                                 """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value(containsString("Strategy not implemented")));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draw.color").value("RED"));
     }
 
     @Test
