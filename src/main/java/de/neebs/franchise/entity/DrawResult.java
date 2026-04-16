@@ -11,11 +11,12 @@ public class DrawResult {
     private final int money;
     private final boolean end;
     private final List<PlayerColor> winners;
+    private final DrawCostSummary costSummary;
     private final long processingTimeNanos;
 
     public DrawResult(DrawRecord draw, int income, List<String> influenceLog,
                       List<InfluenceEvent> influenceEvents, int money,
-                      boolean end, List<PlayerColor> winners,
+                      boolean end, List<PlayerColor> winners, DrawCostSummary costSummary,
                       long processingTimeNanos) {
         this.draw = draw;
         this.income = income;
@@ -24,6 +25,7 @@ public class DrawResult {
         this.money = money;
         this.end = end;
         this.winners = winners;
+        this.costSummary = costSummary;
         this.processingTimeNanos = processingTimeNanos;
     }
 
@@ -34,9 +36,10 @@ public class DrawResult {
     public int getMoney() { return money; }
     public boolean isEnd() { return end; }
     public List<PlayerColor> getWinners() { return winners; }
+    public DrawCostSummary getCostSummary() { return costSummary; }
     public long getProcessingTimeNanos() { return processingTimeNanos; }
 
     public DrawResult withProcessingTimeNanos(long processingTimeNanos) {
-        return new DrawResult(draw, income, influenceLog, influenceEvents, money, end, winners, processingTimeNanos);
+        return new DrawResult(draw, income, influenceLog, influenceEvents, money, end, winners, costSummary, processingTimeNanos);
     }
 }

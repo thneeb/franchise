@@ -96,6 +96,19 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.openRegions", hasSize(0)));
     }
 
+    @Test
+    void retrieveGameBoard_playersRecomputeLiveIncome() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        de.neebs.franchise.entity.GameState state = franchiseService.getGame(gameId);
+        state.getScores().get(de.neebs.franchise.entity.PlayerColor.RED).setIncome(99);
+
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.players[?(@.color=='RED')].income")
+                        .value(contains(franchiseService.getCurrentIncome(
+                                state, de.neebs.franchise.entity.PlayerColor.RED))));
+    }
+
     // -------------------------------------------------------------------------
     // evaluateNextPossibleDraws
     // -------------------------------------------------------------------------
@@ -177,6 +190,8 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.money").value(4))
                 .andExpect(jsonPath("$.end").value(false))
                 .andExpect(jsonPath("$.winners", hasSize(0)))
+                .andExpect(jsonPath("$.info.totalCost").value(0))
+                .andExpect(jsonPath("$.info.calculation").value("Initialization draw: no money spent"))
                 .andExpect(jsonPath("$.info.influenceByRound", hasSize(0)));
 
         // After BLUE's init draw, RED is next
@@ -446,7 +461,17 @@ class FranchiseControllerTest {
                                  "extension":["CHARLOTTE","DETROIT"]}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.draw.extension", hasSize(2)));
+                .andExpect(jsonPath("$.draw.extension", hasSize(2)))
+                .andExpect(jsonPath("$.info.currentMoney").isNumber())
+                .andExpect(jsonPath("$.info.income").isNumber())
+                .andExpect(jsonPath("$.info.bonusMoney").value(0))
+                .andExpect(jsonPath("$.info.availableMoney").isNumber())
+                .andExpect(jsonPath("$.info.extensionCosts[?(@.city=='CHARLOTTE')].value").value(contains(0)))
+                .andExpect(jsonPath("$.info.extensionCosts[?(@.city=='DETROIT')].value").value(contains(1)))
+                .andExpect(jsonPath("$.info.increaseCost").value(0))
+                .andExpect(jsonPath("$.info.totalCost").value(1))
+                .andExpect(jsonPath("$.info.calculation", containsString("CHARLOTTE:$0")))
+                .andExpect(jsonPath("$.info.calculation", containsString("DETROIT:$1")));
 
         // Both cities should now have BLUE's branch
         mockMvc.perform(get("/franchise/{gameId}", gameId))
@@ -473,7 +498,10 @@ class FranchiseControllerTest {
                                 {"playerType":"HUMAN","color":"RED","extension":["OKLAHOMA_CITY"]}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value(containsString("Insufficient funds")));
+                .andExpect(jsonPath("$.detail").value(allOf(
+                        containsString("Insufficient funds"),
+                        containsString("money:$3 + income:$1 = $4"),
+                        containsString("OKLAHOMA_CITY:$5"))));
     }
 
     @Test

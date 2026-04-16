@@ -188,7 +188,7 @@ public class FranchiseController implements FranchiseApi {
                                 .color(PlayerColor.valueOf(p.name()))
                                 .money(s.getMoney())
                                 .influence(s.getInfluence())
-                                .income(s.getIncome())
+                                .income(franchiseService.getCurrentIncome(state, p))
                                 .bonusTiles(s.getBonusTiles());
                     })
                     .collect(Collectors.toList());
@@ -366,7 +366,14 @@ public class FranchiseController implements FranchiseApi {
         ExtendedDrawInfo info = new ExtendedDrawInfo()
                 .income(result.getIncome())
                 .influence(result.getInfluenceLog())
-                .influenceByRound(toInfluenceRounds(result.getInfluenceEvents()));
+                .influenceByRound(toInfluenceRounds(result.getInfluenceEvents()))
+                .currentMoney(result.getCostSummary().getCurrentMoney())
+                .bonusMoney(result.getCostSummary().getBonusMoney())
+                .availableMoney(result.getCostSummary().getAvailableMoney())
+                .extensionCosts(toCityAndIntegerList(result.getCostSummary().getExtensionCosts()))
+                .increaseCost(result.getCostSummary().getIncreaseCost())
+                .totalCost(result.getCostSummary().getTotalCost())
+                .calculation(result.getCostSummary().getCalculation());
 
         return new ExtendedDraw()
                 .draw(toExecutedDraw(result.getDraw(), playerType))
@@ -403,6 +410,14 @@ public class FranchiseController implements FranchiseApi {
                         .color(PlayerColor.valueOf(e.getKey().name()))
                         .value(DurationFormatter.formatNanos(e.getValue())))
                 .collect(Collectors.toList());
+    }
+
+    private List<CityAndInteger> toCityAndIntegerList(List<de.neebs.franchise.entity.CityCost> values) {
+        return values.stream()
+                .map(value -> new CityAndInteger()
+                        .city(City.valueOf(value.getCity().name()))
+                        .value(value.getCost()))
+                .toList();
     }
 
     private Set<String> parseSections(List<String> sections) {

@@ -205,8 +205,24 @@ components:
           $ref: '#/components/schemas/BonusTileUsage'
     ExtendedDrawInfo:
       properties:
+        currentMoney:
+          type: integer
         income:
           type: integer
+        bonusMoney:
+          type: integer
+        availableMoney:
+          type: integer
+        extensionCosts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CityAndInteger'
+        increaseCost:
+          type: integer
+        totalCost:
+          type: integer
+        calculation:
+          type: string
         influence:
           type: array
           items:
@@ -390,6 +406,12 @@ components:
       properties:
         color:
           $ref: '#/components/schemas/PlayerColor'
+        value:
+          type: integer
+    CityAndInteger:
+      properties:
+        city:
+          $ref: '#/components/schemas/City'
         value:
           type: integer
     PlayerColorAndString:

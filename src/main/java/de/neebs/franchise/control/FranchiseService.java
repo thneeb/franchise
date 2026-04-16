@@ -60,17 +60,20 @@ public class FranchiseService {
         List<String> influenceLog = new ArrayList<>();
         List<InfluenceEvent> influenceEvents = new ArrayList<>();
         int income = 0;
+        DrawCostSummary costSummary;
 
         if (state.isInitialization()) {
             income = applyInitDraw(state, player, draw);
+            costSummary = buildInitDrawCostSummary();
         } else {
-            income = applyNormalDraw(state, player, draw, influenceLog, influenceEvents);
+            costSummary = validateAndCalculateCosts(state, player, draw);
+            income = applyNormalDraw(state, player, draw, influenceLog, influenceEvents, costSummary);
         }
 
         state.getDrawHistory().add(draw);
         state.getInfluenceHistory().addAll(influenceEvents);
         return new DrawResult(draw, income, influenceLog, influenceEvents,
-                state.getScores().get(player).getMoney(), state.isEnd(), getWinners(state),
+                state.getScores().get(player).getMoney(), state.isEnd(), getWinners(state), costSummary,
                 System.nanoTime() - start);
     }
 
@@ -635,91 +638,16 @@ public class FranchiseService {
 
     private int applyNormalDraw(GameState state, PlayerColor player, DrawRecord draw,
                                  List<String> log, List<InfluenceEvent> events) {
+        DrawCostSummary costs = validateAndCalculateCosts(state, player, draw);
+        return applyNormalDraw(state, player, draw, log, events, costs);
+    }
+
+    private int applyNormalDraw(GameState state, PlayerColor player, DrawRecord draw,
+                                 List<String> log, List<InfluenceEvent> events,
+                                 DrawCostSummary costs) {
         BonusTileUsage bonus = draw.getBonusTileUsage();
         List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
         List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
-
-        // --- Validate everything before mutating state ---
-
-        if (bonus != null) {
-            if (state.getRound() <= state.getPlayers().size()) {
-                throw new IllegalArgumentException("Bonus tiles cannot be used on the first turn");
-            }
-            if (state.getScores().get(player).getBonusTiles() <= 0) {
-                throw new IllegalArgumentException("No bonus tiles remaining");
-            }
-        }
-
-        // EXTENSION bonus requires exactly 2 cities; without it at most 1
-        if (bonus == BonusTileUsage.EXTENSION) {
-            if (extensions.size() != 2) {
-                throw new IllegalArgumentException(
-                        "EXTENSION bonus tile requires exactly 2 cities to expand to");
-            }
-        } else {
-            if (extensions.size() > 1) {
-                throw new IllegalArgumentException(
-                        "Cannot expand to more than 1 city/cities per turn without a bonus tile");
-            }
-        }
-        if (extensions.size() == 2 && extensions.get(0).equals(extensions.get(1))) {
-            throw new IllegalArgumentException("Cannot expand to the same city twice");
-        }
-
-        // Each extension target must be a valid expansion target:
-        // directly reachable, not closed, not already occupied by this player
-        for (City target : extensions) {
-            if (minExpansionCost(state, player, target).isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Cannot reach " + target.getName() + " from any occupied city");
-            }
-            if (!isValidTarget(state, player, target)) {
-                throw new IllegalArgumentException(
-                        "Cannot expand to " + target.getName()
-                        + ": city is closed, full, or you already have a branch there");
-            }
-        }
-
-        // INCREASE bonus: double-increase in one city — must be represented as [city, city]
-        if (bonus == BonusTileUsage.INCREASE) {
-            if (increases.size() != 2 || !increases.get(0).equals(increases.get(1))) {
-                throw new IllegalArgumentException(
-                        "INCREASE bonus tile requires exactly 2 identical cities (e.g. [\"CITY\",\"CITY\"])");
-            }
-            Set<City> validDoubleIncreases = validIncreaseCities(state, player, extensions, 2);
-            if (!validDoubleIncreases.contains(increases.get(0))) {
-                throw new IllegalArgumentException(
-                        "Cannot double-increase in " + increases.get(0).getName()
-                        + ": need a pre-existing branch and at least 2 free slots");
-            }
-        } else {
-            // Can only increase in cities with a pre-existing branch,
-            // not in cities being expanded to this same turn (expansion marker ≠ branch)
-            Set<City> validIncreases = validIncreaseCities(state, player, extensions);
-            for (City city : increases) {
-                if (!validIncreases.contains(city)) {
-                    throw new IllegalArgumentException(
-                            "Cannot increase in " + city.getName()
-                            + ": no pre-existing branch there");
-                }
-            }
-        }
-
-        // Affordability check: income + current money (+ $10 if MONEY bonus) must cover all costs
-        int income = calcIncome(state, player);
-        int currentMoney = state.getScores().get(player).getMoney();
-        int baseAvailableMoney = currentMoney + income; // before bonus — used for skip-end check
-        int availableMoney = baseAvailableMoney + (bonus == BonusTileUsage.MONEY ? 10 : 0);
-        int extensionCost = extensions.stream()
-                .mapToInt(t -> minExpansionCost(state, player, t).getAsInt())
-                .sum();
-        int increaseCost = (bonus == BonusTileUsage.INCREASE) ? 1 : increases.size();
-        if (availableMoney < extensionCost + increaseCost) {
-            throw new IllegalArgumentException(
-                    "Insufficient funds: need $" + (extensionCost + increaseCost)
-                    + " but only have $" + availableMoney + " (money + income"
-                    + (bonus == BonusTileUsage.MONEY ? " + $10 bonus" : "") + ")");
-        }
 
         // --- All validation passed; now mutate state ---
 
@@ -732,13 +660,12 @@ public class FranchiseService {
         }
 
         // Phase 1: Income
-        score.setMoney(score.getMoney() + income);
-        score.setIncome(income);
+        score.setMoney(score.getMoney() + costs.getIncome());
+        score.setIncome(costs.getIncome());
 
         // Phase 2: Pay expansion route costs
-        for (City target : extensions) {
-            int cost = minExpansionCost(state, player, target).getAsInt();
-            score.setMoney(score.getMoney() - cost);
+        for (CityCost extensionCost : costs.getExtensionCosts()) {
+            score.setMoney(score.getMoney() - extensionCost.getCost());
         }
 
         // Phase 3: Pay for increases
@@ -782,7 +709,8 @@ public class FranchiseService {
 
         // Game end check (all players unable to expand consecutively)
         if (!state.isEnd()) {
-            updateConsecutiveSkipCounter(state, player, extensions, baseAvailableMoney, log, events);
+            updateConsecutiveSkipCounter(state, player, extensions,
+                    costs.getCurrentMoney() + costs.getIncome(), log, events);
         }
 
         // Advance turn
@@ -790,12 +718,16 @@ public class FranchiseService {
                 (state.getCurrentPlayerIndex() + 1) % state.getPlayers().size());
         state.setRound(state.getRound() + 1);
 
-        return income;
+        return costs.getIncome();
     }
 
     // -------------------------------------------------------------------------
     // Income
     // -------------------------------------------------------------------------
+
+    public int getCurrentIncome(GameState state, PlayerColor player) {
+        return calcIncome(state, player);
+    }
 
     private int calcIncome(GameState state, PlayerColor player) {
         int freeSlots = 0;
@@ -812,6 +744,124 @@ public class FranchiseService {
             if (presence) freeSlots += free;
         }
         return Rules.calcIncome(state.getPlayers().size(), freeSlots);
+    }
+
+    private DrawCostSummary validateAndCalculateCosts(GameState state, PlayerColor player, DrawRecord draw) {
+        BonusTileUsage bonus = draw.getBonusTileUsage();
+        List<City> extensions = draw.getExtension() != null ? draw.getExtension() : List.of();
+        List<City> increases = draw.getIncrease() != null ? draw.getIncrease() : List.of();
+
+        if (bonus != null) {
+            if (state.getRound() <= state.getPlayers().size()) {
+                throw new IllegalArgumentException("Bonus tiles cannot be used on the first turn");
+            }
+            if (state.getScores().get(player).getBonusTiles() <= 0) {
+                throw new IllegalArgumentException("No bonus tiles remaining");
+            }
+        }
+
+        if (bonus == BonusTileUsage.EXTENSION) {
+            if (extensions.size() != 2) {
+                throw new IllegalArgumentException(
+                        "EXTENSION bonus tile requires exactly 2 cities to expand to");
+            }
+        } else if (extensions.size() > 1) {
+            throw new IllegalArgumentException(
+                    "Cannot expand to more than 1 city/cities per turn without a bonus tile");
+        }
+        if (extensions.size() == 2 && extensions.get(0).equals(extensions.get(1))) {
+            throw new IllegalArgumentException("Cannot expand to the same city twice");
+        }
+
+        List<CityCost> extensionCosts = new ArrayList<>();
+        for (City target : extensions) {
+            OptionalInt routeCost = minExpansionCost(state, player, target);
+            if (routeCost.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Cannot reach " + target.getName() + " from any occupied city");
+            }
+            if (!isValidTarget(state, player, target)) {
+                throw new IllegalArgumentException(
+                        "Cannot expand to " + target.getName()
+                                + ": city is closed, full, or you already have a branch there");
+            }
+            extensionCosts.add(new CityCost(target, routeCost.getAsInt()));
+        }
+
+        if (bonus == BonusTileUsage.INCREASE) {
+            if (increases.size() != 2 || !increases.get(0).equals(increases.get(1))) {
+                throw new IllegalArgumentException(
+                        "INCREASE bonus tile requires exactly 2 identical cities (e.g. [\"CITY\",\"CITY\"])");
+            }
+            Set<City> validDoubleIncreases = validIncreaseCities(state, player, extensions, 2);
+            if (!validDoubleIncreases.contains(increases.get(0))) {
+                throw new IllegalArgumentException(
+                        "Cannot double-increase in " + increases.get(0).getName()
+                                + ": need a pre-existing branch and at least 2 free slots");
+            }
+        } else {
+            Set<City> validIncreases = validIncreaseCities(state, player, extensions);
+            for (City city : increases) {
+                if (!validIncreases.contains(city)) {
+                    throw new IllegalArgumentException(
+                            "Cannot increase in " + city.getName()
+                                    + ": no pre-existing branch there");
+                }
+            }
+        }
+
+        DrawCostSummary costs = buildNormalDrawCostSummary(state, player, bonus, extensionCosts, increases);
+        if (costs.getAvailableMoney() < costs.getTotalCost()) {
+            throw new IllegalArgumentException(
+                    "Insufficient funds: need $" + costs.getTotalCost()
+                            + " but only have $" + costs.getAvailableMoney()
+                            + ". " + costs.getCalculation());
+        }
+        return costs;
+    }
+
+    private DrawCostSummary buildInitDrawCostSummary() {
+        return new DrawCostSummary(0, 0, 0, 0, List.of(), 0, 0, "Initialization draw: no money spent");
+    }
+
+    private DrawCostSummary buildNormalDrawCostSummary(GameState state, PlayerColor player,
+                                                       BonusTileUsage bonus, List<CityCost> extensionCosts,
+                                                       List<City> increases) {
+        int currentMoney = state.getScores().get(player).getMoney();
+        int income = calcIncome(state, player);
+        int bonusMoney = bonus == BonusTileUsage.MONEY ? 10 : 0;
+        int availableMoney = currentMoney + income + bonusMoney;
+        int increaseCost = bonus == BonusTileUsage.INCREASE
+                ? (increases.isEmpty() ? 0 : 1)
+                : increases.size();
+        int extensionCost = extensionCosts.stream().mapToInt(CityCost::getCost).sum();
+        int totalCost = extensionCost + increaseCost;
+        return new DrawCostSummary(currentMoney, income, bonusMoney, availableMoney,
+                List.copyOf(extensionCosts), increaseCost, totalCost,
+                buildCostCalculation(currentMoney, income, bonusMoney, extensionCosts, increaseCost, totalCost));
+    }
+
+    private String buildCostCalculation(int currentMoney, int income, int bonusMoney,
+                                        List<CityCost> extensionCosts, int increaseCost, int totalCost) {
+        List<String> costParts = new ArrayList<>();
+        if (extensionCosts.isEmpty()) {
+            costParts.add("no extension costs");
+        } else {
+            costParts.addAll(extensionCosts.stream()
+                    .map(cost -> cost.getCity().name() + ":$" + cost.getCost())
+                    .toList());
+        }
+        if (increaseCost > 0) {
+            costParts.add("increase:$" + increaseCost);
+        } else if (extensionCosts.isEmpty()) {
+            costParts.add("no increase cost");
+        }
+        return "Available = money:$" + currentMoney
+                + " + income:$" + income
+                + (bonusMoney > 0 ? " + bonus:$" + bonusMoney : "")
+                + " = $" + (currentMoney + income + bonusMoney)
+                + "; Costs = " + String.join(" + ", costParts)
+                + " = $" + totalCost;
     }
 
     // -------------------------------------------------------------------------
