@@ -5,10 +5,12 @@ import de.neebs.franchise.control.FranchiseService;
 import de.neebs.franchise.entity.CalibrationConfig;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.DrawResult;
+import de.neebs.franchise.entity.DurationFormatter;
 import de.neebs.franchise.entity.EvalParams;
 import de.neebs.franchise.entity.EvalParamsRanking;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.InfluenceEvent;
+import de.neebs.franchise.entity.LearningRunResult;
 import de.neebs.franchise.entity.Score;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -90,7 +92,7 @@ public class FranchiseController implements FranchiseApi {
     }
 
     @Override
-    public ResponseEntity<List<PlayerColorAndInteger>> playGame(String gameId, PlayConfig playConfig) {
+    public ResponseEntity<LearningResult> playGame(String gameId, PlayConfig playConfig) {
         List<de.neebs.franchise.entity.PlayerColor> players = playConfig.getPlayers().stream()
                 .map(cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()))
                 .collect(Collectors.toList());
@@ -135,15 +137,17 @@ public class FranchiseController implements FranchiseApi {
 
         String runId = learningModels.isEmpty() ? null : gameId;
 
-        Map<de.neebs.franchise.entity.PlayerColor, Integer> wins =
+        LearningRunResult result =
                 franchiseService.runGames(players, strategies, playerParams, learningModels, runId, times);
 
-        List<PlayerColorAndInteger> result = wins.entrySet().stream()
+        LearningResult model = new LearningResult()
+                .wins(result.getWins().entrySet().stream()
                 .map(e -> new PlayerColorAndInteger()
                         .color(PlayerColor.valueOf(e.getKey().name()))
                         .value(e.getValue()))
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(result);
+                .collect(Collectors.toList()))
+                .processingTimes(toPlayerColorAndStringList(result.getProcessingTimeNanos()));
+        return ResponseEntity.ok(model);
     }
 
     // -------------------------------------------------------------------------
@@ -340,6 +344,7 @@ public class FranchiseController implements FranchiseApi {
                                         .color(PlayerColor.valueOf(e.getKey().name()))
                                         .value(e.getValue()))
                                 .collect(Collectors.toList()))
+                        .processingTimes(toPlayerColorAndStringList(progress.getProcessingTimeNanos()))
                         .done(progress.isDone());
         return ResponseEntity.ok(model);
     }
@@ -366,6 +371,7 @@ public class FranchiseController implements FranchiseApi {
         return new ExtendedDraw()
                 .draw(toExecutedDraw(result.getDraw(), playerType))
                 .info(info)
+                .processingTime(DurationFormatter.formatNanos(result.getProcessingTimeNanos()))
                 .money(result.getMoney())
                 .end(result.isEnd())
                 .winners(result.isEnd()
@@ -389,6 +395,14 @@ public class FranchiseController implements FranchiseApi {
                         .round(entry.getKey())
                         .entries(entry.getValue()))
                 .toList();
+    }
+
+    private List<PlayerColorAndString> toPlayerColorAndStringList(Map<de.neebs.franchise.entity.PlayerColor, Long> values) {
+        return values.entrySet().stream()
+                .map(e -> new PlayerColorAndString()
+                        .color(PlayerColor.valueOf(e.getKey().name()))
+                        .value(DurationFormatter.formatNanos(e.getValue())))
+                .collect(Collectors.toList());
     }
 
     private Set<String> parseSections(List<String> sections) {

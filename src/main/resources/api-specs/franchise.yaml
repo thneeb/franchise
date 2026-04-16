@@ -155,13 +155,11 @@ paths:
               $ref: '#/components/schemas/PlayConfig'
       responses:
         '200':
-          description: Returns win counts per player
+          description: Returns win counts and summed processing times per player
           content:
             'application/json':
               schema:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/PlayerColorAndInteger'
+                $ref: '#/components/schemas/LearningResult'
     get:
       operationId: getLearningProgress
       responses:
@@ -179,6 +177,8 @@ components:
           $ref: '#/components/schemas/ExecutedDraw'
         info:
           $ref: '#/components/schemas/ExtendedDrawInfo'
+        processingTime:
+          type: string
         money:
           type: integer
         end:
@@ -346,6 +346,7 @@ components:
       enum:
         - RANDOM
         - MONTE_CARLO_TREE_SEARCH
+        - SELF_PLAY_Q
         - MAXIMAX
         - MINIMAX
         - AB_PRUNE
@@ -391,6 +392,22 @@ components:
           $ref: '#/components/schemas/PlayerColor'
         value:
           type: integer
+    PlayerColorAndString:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        value:
+          type: string
+    LearningResult:
+      properties:
+        wins:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColorAndInteger'
+        processingTimes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColorAndString'
     CalibrateConfig:
       properties:
         playerCount:
@@ -444,6 +461,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerColorAndInteger'
+        processingTimes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerColorAndString'
         done:
           type: boolean
     BonusTileUsage:

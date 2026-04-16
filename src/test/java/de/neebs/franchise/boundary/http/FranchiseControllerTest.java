@@ -173,6 +173,7 @@ class FranchiseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.color").value("BLUE"))
                 .andExpect(jsonPath("$.draw.extension[0]").value("INDIANAPOLIS"))
+                .andExpect(jsonPath("$.processingTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
                 .andExpect(jsonPath("$.money").value(4))
                 .andExpect(jsonPath("$.end").value(false))
                 .andExpect(jsonPath("$.winners", hasSize(0)))
@@ -742,7 +743,8 @@ class FranchiseControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.color").value("RED"))
-                .andExpect(jsonPath("$.draw.playerType").value("COMPUTER"));
+                .andExpect(jsonPath("$.draw.playerType").value("COMPUTER"))
+                .andExpect(jsonPath("$.processingTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")));
     }
 
     @Test
@@ -773,6 +775,22 @@ class FranchiseControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.color").value("RED"));
+    }
+
+    @Test
+    void computerDraw_selfPlayQ_returnsValidDraw() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+
+        mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"playerType":"COMPUTER","color":"RED","strategy":"SELF_PLAY_Q"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draw.color").value("RED"))
+                .andExpect(jsonPath("$.draw.playerType").value("COMPUTER"));
     }
 
     @Test
@@ -856,9 +874,13 @@ class FranchiseControllerTest {
                                  ]}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].value").isNumber())
-                .andExpect(jsonPath("$[1].value").isNumber());
+                .andExpect(jsonPath("$.wins", hasSize(2)))
+                .andExpect(jsonPath("$.wins[0].value").isNumber())
+                .andExpect(jsonPath("$.wins[1].value").isNumber())
+                .andExpect(jsonPath("$.processingTimes", hasSize(2)))
+                .andExpect(jsonPath("$.processingTimes[*].color", containsInAnyOrder("RED", "BLUE")))
+                .andExpect(jsonPath("$.processingTimes[*].value",
+                        everyItem(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}"))));
     }
 
     @Test
@@ -882,6 +904,37 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.runId").value(gameId))
                 .andExpect(jsonPath("$.wins", hasSize(2)))
                 .andExpect(jsonPath("$.wins[*].color", containsInAnyOrder("RED", "BLUE")))
-                .andExpect(jsonPath("$.wins[*].value", everyItem(isA(Number.class))));
+                .andExpect(jsonPath("$.wins[*].value", everyItem(isA(Number.class))))
+                .andExpect(jsonPath("$.processingTimes", hasSize(2)))
+                .andExpect(jsonPath("$.processingTimes[*].color", containsInAnyOrder("RED", "BLUE")))
+                .andExpect(jsonPath("$.processingTimes[*].value",
+                        everyItem(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}"))));
+    }
+
+    @Test
+    void playGame_selfPlayQTraining_returnsWinsAndProgress() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"timesToPlay":1,
+                                 "learningModels":["SELF_PLAY_Q"],
+                                 "players":[
+                                   {"playerType":"COMPUTER","color":"RED","strategy":"SELF_PLAY_Q"},
+                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"SELF_PLAY_Q"}
+                                 ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wins", hasSize(2)))
+                .andExpect(jsonPath("$.wins[0].value").isNumber())
+                .andExpect(jsonPath("$.wins[1].value").isNumber())
+                .andExpect(jsonPath("$.processingTimes", hasSize(2)));
+
+        mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").value(gameId))
+                .andExpect(jsonPath("$.wins", hasSize(2)))
+                .andExpect(jsonPath("$.processingTimes", hasSize(2)));
     }
 }

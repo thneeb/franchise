@@ -49,6 +49,7 @@ public class FranchiseService {
     }
 
     public DrawResult applyDraw(String gameId, DrawRecord draw) {
+        long start = System.nanoTime();
         GameState state = getGame(gameId);
         PlayerColor player = currentPlayer(state);
 
@@ -69,7 +70,8 @@ public class FranchiseService {
         state.getDrawHistory().add(draw);
         state.getInfluenceHistory().addAll(influenceEvents);
         return new DrawResult(draw, income, influenceLog, influenceEvents,
-                state.getScores().get(player).getMoney(), state.isEnd(), getWinners(state));
+                state.getScores().get(player).getMoney(), state.isEnd(), getWinners(state),
+                System.nanoTime() - start);
     }
 
     public List<DrawRecord> getPossibleDraws(String gameId) {
@@ -394,6 +396,7 @@ public class FranchiseService {
 
     public DrawResult computeBestDraw(String gameId, PlayerColor requestedPlayer,
                                       String strategyName, Map<String, Object> params) {
+        long start = System.nanoTime();
         GameStrategy strategy = strategies.get(strategyName);
         if (strategy == null) {
             throw new IllegalArgumentException("Strategy not implemented: " + strategyName);
@@ -408,7 +411,8 @@ public class FranchiseService {
             throw new IllegalArgumentException(
                     "Strategy selected a draw for " + best.getColor() + " but current player is " + player);
         }
-        return applyDraw(gameId, best);
+        DrawResult result = applyDraw(gameId, best);
+        return result.withProcessingTimeNanos(System.nanoTime() - start);
     }
 
     // Runs timesToPlay full headless games and returns win counts per player
@@ -419,14 +423,16 @@ public class FranchiseService {
         return learningRuns.get(runId);
     }
 
-    public Map<PlayerColor, Integer> runGames(List<PlayerColor> players,
-                                              Map<PlayerColor, String> playerStrategies,
-                                              Map<PlayerColor, Map<String, Object>> playerParams,
-                                              Set<String> learningModels,
-                                              String runId,
-                                              int timesToPlay) {
+    public LearningRunResult runGames(List<PlayerColor> players,
+                                      Map<PlayerColor, String> playerStrategies,
+                                      Map<PlayerColor, Map<String, Object>> playerParams,
+                                      Set<String> learningModels,
+                                      String runId,
+                                      int timesToPlay) {
         Map<PlayerColor, Integer> wins = new EnumMap<>(PlayerColor.class);
         players.forEach(p -> wins.put(p, 0));
+        Map<PlayerColor, Long> processingTimes = new EnumMap<>(PlayerColor.class);
+        players.forEach(p -> processingTimes.put(p, 0L));
         boolean training = !learningModels.isEmpty();
 
         de.neebs.franchise.entity.LearningProgress progress = null;
@@ -448,7 +454,11 @@ public class FranchiseService {
                     PlayerColor current = currentPlayer(games.get(tmpId));
                     String strategyName = playerStrategies.get(current);
                     Map<String, Object> params = playerParams.getOrDefault(current, Map.of());
-                    computeBestDraw(tmpId, strategyName, params);
+                    DrawResult result = computeBestDraw(tmpId, strategyName, params);
+                    processingTimes.merge(current, result.getProcessingTimeNanos(), Long::sum);
+                    if (progressRef != null) {
+                        progressRef.recordProcessingTime(current, result.getProcessingTimeNanos());
+                    }
                     turns++;
                 }
                 if (training) trajectory.add(games.get(tmpId).deepCopy());
@@ -475,7 +485,7 @@ public class FranchiseService {
                 games.remove(tmpId);
             }
         }
-        return wins;
+        return new LearningRunResult(wins, processingTimes);
     }
 
     public GameState undoDraws(String gameId, int fromIndex) {
