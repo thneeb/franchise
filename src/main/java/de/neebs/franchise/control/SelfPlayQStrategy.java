@@ -3,7 +3,6 @@ package de.neebs.franchise.control;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.PlayerColor;
-import de.neebs.franchise.entity.Score;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -24,7 +23,7 @@ public class SelfPlayQStrategy implements TrainableStrategy {
     private static final int DEFAULT_BATCH_SIZE = 64;
     private static final int DEFAULT_UPDATES_PER_GAME = 8;
     private static final int DEFAULT_REPLAY_CAPACITY = 20_000;
-    private static final float DISCOUNT = 0.92f;
+    private static final float DISCOUNT = 0.99f;
 
     private final FranchiseService franchiseService;
     private final SelfPlayQModelService modelService;
@@ -82,14 +81,12 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         List<ValueTrainingSample> freshSamples = new ArrayList<>();
         for (int i = trajectory.size() - 2; i >= 0; i--) {
             GameState before = trajectory.get(i);
-            GameState after = trajectory.get(i + 1);
             PlayerColor mover = before.getPlayers().get(before.getCurrentPlayerIndex());
-
-            float target = clamp01(immediateReward(before, after, mover)
-                    + DISCOUNT * futureTargets.getOrDefault(mover, outcomeFor(mover, finalScores)));
+            float target = clamp01(
+                    DISCOUNT * futureTargets.getOrDefault(mover, outcomeFor(mover, finalScores)));
 
             if (STRATEGY_NAME.equals(playerStrategies.get(mover))) {
-                freshSamples.add(new ValueTrainingSample(encoder.encode(after, mover), target));
+                freshSamples.add(new ValueTrainingSample(encoder.encode(trajectory.get(i + 1), mover), target));
             }
             futureTargets.put(mover, target);
         }
@@ -112,15 +109,6 @@ public class SelfPlayQStrategy implements TrainableStrategy {
             return 0.0f;
         }
         return winners == 1 ? 1.0f : 0.5f;
-    }
-
-    private static float immediateReward(GameState before, GameState after, PlayerColor mover) {
-        Score beforeScore = before.getScores().get(mover);
-        Score afterScore = after.getScores().get(mover);
-
-        float influenceGain = Math.max(0, afterScore.getInfluence() - beforeScore.getInfluence()) / 50.0f;
-        float incomeGain = Math.max(0, afterScore.getIncome() - beforeScore.getIncome()) / 20.0f;
-        return 0.75f * influenceGain + 0.25f * incomeGain;
     }
 
     private static float clamp01(float value) {

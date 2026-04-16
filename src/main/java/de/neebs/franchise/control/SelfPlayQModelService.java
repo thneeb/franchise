@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 class SelfPlayQModelService {
 
     private static final String MODEL_DIR = "self-play-q/";
+    private static final String MODEL_VERSION = "terminal-outcome-d099-v1";
     private static final int HIDDEN1 = 256;
     private static final int HIDDEN2 = 128;
 
@@ -77,6 +78,6 @@ class SelfPlayQModelService {
     }
 
     private static String fileName(int numPlayers) {
-        return "self-play-q-model-" + numPlayers + "p.json";
+        return "self-play-q-model-" + numPlayers + "p-" + MODEL_VERSION + ".json";
     }
 }
