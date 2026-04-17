@@ -15,7 +15,12 @@ import java.util.Map;
  *                         so implementations can filter to only their own turns.
  */
 public interface TrainableStrategy extends GameStrategy {
-    void onGameComplete(List<GameState> trajectory,
-                        Map<PlayerColor, Integer> finalScores,
-                        Map<PlayerColor, String> playerStrategies);
+    TrainingTimings onGameComplete(List<GameState> trajectory,
+                                   Map<PlayerColor, Integer> finalScores,
+                                   Map<PlayerColor, String> playerStrategies,
+                                   Map<PlayerColor, Map<String, Object>> playerParams);
+
+    default long getTrainingRuns(int numPlayers) {
+        return 0L;
+    }
 }

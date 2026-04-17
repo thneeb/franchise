@@ -84,6 +84,10 @@ class MonteCarloValueModelService {
         }
     }
 
+    long getTrainingRuns(int numPlayers) {
+        return getOrCreate(numPlayers).getTrainingRuns();
+    }
+
     private File modelFile(int numPlayers) {
         String projectRoot = System.getProperty("user.dir");
         return new File(projectRoot, "src/main/resources/" + MODEL_DIR + fileName(numPlayers));

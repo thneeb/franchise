@@ -23,7 +23,14 @@ public class FranchiseService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setStrategies(Map<String, GameStrategy> strategies) {
-        this.strategies = strategies;
+        Map<String, GameStrategy> aliases = new LinkedHashMap<>(strategies);
+        if (aliases.containsKey("SELF_PLAY_Q")) {
+            aliases.putIfAbsent("Q_LEARNING", aliases.get("SELF_PLAY_Q"));
+        }
+        if (aliases.containsKey("Q_LEARNING")) {
+            aliases.putIfAbsent("SELF_PLAY_Q", aliases.get("Q_LEARNING"));
+        }
+        this.strategies = aliases;
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -400,7 +407,8 @@ public class FranchiseService {
     public DrawResult computeBestDraw(String gameId, PlayerColor requestedPlayer,
                                       String strategyName, Map<String, Object> params) {
         long start = System.nanoTime();
-        GameStrategy strategy = strategies.get(strategyName);
+        String canonicalStrategyName = canonicalStrategyName(strategyName);
+        GameStrategy strategy = strategies.get(canonicalStrategyName);
         if (strategy == null) {
             throw new IllegalArgumentException("Strategy not implemented: " + strategyName);
         }
@@ -432,15 +440,35 @@ public class FranchiseService {
                                       Set<String> learningModels,
                                       String runId,
                                       int timesToPlay) {
+        playerStrategies = playerStrategies.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> canonicalStrategyName(e.getValue())));
+        learningModels = learningModels.stream()
+                .map(FranchiseService::canonicalStrategyName)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        long runStart = System.nanoTime();
         Map<PlayerColor, Integer> wins = new EnumMap<>(PlayerColor.class);
         players.forEach(p -> wins.put(p, 0));
         Map<PlayerColor, Long> processingTimes = new EnumMap<>(PlayerColor.class);
         players.forEach(p -> processingTimes.put(p, 0L));
+        long snapshotTimes = 0L;
+        long trainingTimes = 0L;
+        long modelSaveTimes = 0L;
         boolean training = !learningModels.isEmpty();
+        Map<String, Long> trainingRunCounts = new LinkedHashMap<>();
+        if (training) {
+            for (String modelName : learningModels) {
+                GameStrategy strategy = strategies.get(modelName);
+                if (strategy instanceof TrainableStrategy ts) {
+                    trainingRunCounts.put(modelName, ts.getTrainingRuns(players.size()));
+                }
+            }
+        }
 
         de.neebs.franchise.entity.LearningProgress progress = null;
         if (runId != null) {
-            progress = new de.neebs.franchise.entity.LearningProgress(runId, timesToPlay, players);
+            progress = new de.neebs.franchise.entity.LearningProgress(runId, timesToPlay, players, trainingRunCounts);
             learningRuns.put(runId, progress);
         }
         final de.neebs.franchise.entity.LearningProgress progressRef = progress;
@@ -453,7 +481,13 @@ public class FranchiseService {
             int turns = 0;
             try {
                 while (!games.get(tmpId).isEnd() && turns < MAX_HEADLESS_GAME_TURNS) {
-                    if (training) trajectory.add(games.get(tmpId).deepCopy());
+                    if (training) {
+                        long snapshotStart = System.nanoTime();
+                        trajectory.add(games.get(tmpId).deepCopy());
+                        long snapshotNanos = System.nanoTime() - snapshotStart;
+                        snapshotTimes += snapshotNanos;
+                        if (progressRef != null) progressRef.recordSnapshotTime(snapshotNanos);
+                    }
                     PlayerColor current = currentPlayer(games.get(tmpId));
                     String strategyName = playerStrategies.get(current);
                     Map<String, Object> params = playerParams.getOrDefault(current, Map.of());
@@ -464,7 +498,13 @@ public class FranchiseService {
                     }
                     turns++;
                 }
-                if (training) trajectory.add(games.get(tmpId).deepCopy());
+                if (training) {
+                    long snapshotStart = System.nanoTime();
+                    trajectory.add(games.get(tmpId).deepCopy());
+                    long snapshotNanos = System.nanoTime() - snapshotStart;
+                    snapshotTimes += snapshotNanos;
+                    if (progressRef != null) progressRef.recordSnapshotTime(snapshotNanos);
+                }
 
                 PlayerColor winner = games.get(tmpId).getScores().entrySet().stream()
                         .max(Map.Entry.comparingByValue(
@@ -480,7 +520,19 @@ public class FranchiseService {
                     for (String modelName : learningModels) {
                         GameStrategy strategy = strategies.get(modelName);
                         if (strategy instanceof TrainableStrategy ts) {
-                            ts.onGameComplete(trajectory, finalScores, playerStrategies);
+                            TrainingTimings timings = ts.onGameComplete(
+                                    trajectory,
+                                    finalScores,
+                                    playerStrategies,
+                                    playerParams);
+                            trainingTimes += timings.trainingNanos();
+                            modelSaveTimes += timings.modelSaveNanos();
+                            trainingRunCounts.put(modelName, ts.getTrainingRuns(players.size()));
+                            if (progressRef != null) {
+                                progressRef.recordTrainingTime(timings.trainingNanos());
+                                progressRef.recordModelSaveTime(timings.modelSaveNanos());
+                                progressRef.updateTrainingRuns(modelName, trainingRunCounts.get(modelName));
+                            }
                         }
                     }
                 }
@@ -488,7 +540,12 @@ public class FranchiseService {
                 games.remove(tmpId);
             }
         }
-        return new LearningRunResult(wins, processingTimes);
+        return new LearningRunResult(wins, processingTimes, snapshotTimes, trainingTimes, modelSaveTimes,
+                System.nanoTime() - runStart, trainingRunCounts);
+    }
+
+    private static String canonicalStrategyName(String strategyName) {
+        return "SELF_PLAY_Q".equals(strategyName) ? "Q_LEARNING" : strategyName;
     }
 
     public GameState undoDraws(String gameId, int fromIndex) {

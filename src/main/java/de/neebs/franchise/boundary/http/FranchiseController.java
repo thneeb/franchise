@@ -100,7 +100,7 @@ public class FranchiseController implements FranchiseApi {
         Map<de.neebs.franchise.entity.PlayerColor, String> strategies = playConfig.getPlayers().stream()
                 .collect(Collectors.toMap(
                         cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()),
-                        cp -> cp.getStrategy().name()));
+                        cp -> canonicalStrategyName(cp.getStrategy())));
 
         // Per-player params override global params; fall back to global then empty map
         Map<String, Object> globalParams = playConfig.getParams() != null ? playConfig.getParams() : Map.of();
@@ -114,7 +114,7 @@ public class FranchiseController implements FranchiseApi {
 
         Set<String> learningModels = playConfig.getLearningModels() != null
                 ? playConfig.getLearningModels().stream()
-                        .map(ComputerStrategy::name)
+                        .map(this::canonicalStrategyName)
                         .collect(Collectors.toSet())
                 : Set.of();
 
@@ -146,7 +146,13 @@ public class FranchiseController implements FranchiseApi {
                         .color(PlayerColor.valueOf(e.getKey().name()))
                         .value(e.getValue()))
                 .collect(Collectors.toList()))
-                .processingTimes(toPlayerColorAndStringList(result.getProcessingTimeNanos()));
+                .runtimes(toLearningRuntimes(
+                        result.getProcessingTimeNanos(),
+                        result.getSnapshotTimeNanos(),
+                        result.getTrainingTimeNanos(),
+                        result.getModelSaveTimeNanos(),
+                        result.getTotalTimeNanos()))
+                .trainingRuns(toComputerStrategyAndIntegerList(result.getTrainingRuns()));
         return ResponseEntity.ok(model);
     }
 
@@ -344,7 +350,13 @@ public class FranchiseController implements FranchiseApi {
                                         .color(PlayerColor.valueOf(e.getKey().name()))
                                         .value(e.getValue()))
                                 .collect(Collectors.toList()))
-                        .processingTimes(toPlayerColorAndStringList(progress.getProcessingTimeNanos()))
+                        .runtimes(toLearningRuntimes(
+                                progress.getProcessingTimeNanos(),
+                                progress.getSnapshotTimeNanos(),
+                                progress.getTrainingTimeNanos(),
+                                progress.getModelSaveTimeNanos(),
+                                progress.getTotalTimeNanos()))
+                        .trainingRuns(toComputerStrategyAndIntegerList(progress.getTrainingRuns()))
                         .done(progress.isDone());
         return ResponseEntity.ok(model);
     }
@@ -410,6 +422,46 @@ public class FranchiseController implements FranchiseApi {
                         .color(PlayerColor.valueOf(e.getKey().name()))
                         .value(DurationFormatter.formatNanos(e.getValue())))
                 .collect(Collectors.toList());
+    }
+
+    private List<ComputerStrategyAndInteger> toComputerStrategyAndIntegerList(Map<String, Long> values) {
+        return values.entrySet().stream()
+                .map(e -> new ComputerStrategyAndInteger()
+                        .strategy(ComputerStrategy.valueOf(e.getKey()))
+                        .value(Math.toIntExact(e.getValue())))
+                .toList();
+    }
+
+    private String canonicalStrategyName(ComputerStrategy strategy) {
+        return strategy == ComputerStrategy.SELF_PLAY_Q ? ComputerStrategy.Q_LEARNING.name() : strategy.name();
+    }
+
+    private LearningRuntimes toLearningRuntimes(Map<de.neebs.franchise.entity.PlayerColor, Long> processingTimes,
+                                                long snapshotTimeNanos,
+                                                long trainingTimeNanos,
+                                                long modelSaveTimeNanos,
+                                                long totalTimeNanos) {
+        return new LearningRuntimes()
+                .processingTimes(toPlayerColorAndStringList(processingTimes))
+                .snapshotTime(DurationFormatter.formatNanos(snapshotTimeNanos))
+                .trainingTime(DurationFormatter.formatNanos(trainingTimeNanos))
+                .modelSaveTime(DurationFormatter.formatNanos(modelSaveTimeNanos))
+                .otherTime(DurationFormatter.formatNanos(otherTimeNanos(
+                        totalTimeNanos,
+                        processingTimes,
+                        snapshotTimeNanos,
+                        trainingTimeNanos,
+                        modelSaveTimeNanos)))
+                .totalTime(DurationFormatter.formatNanos(totalTimeNanos));
+    }
+
+    private long otherTimeNanos(long totalTimeNanos,
+                                Map<de.neebs.franchise.entity.PlayerColor, Long> processingTimes,
+                                long snapshotTimeNanos,
+                                long trainingTimeNanos,
+                                long modelSaveTimeNanos) {
+        long processingNanos = processingTimes.values().stream().mapToLong(Long::longValue).sum();
+        return Math.max(0L, totalTimeNanos - processingNanos - snapshotTimeNanos - trainingTimeNanos - modelSaveTimeNanos);
     }
 
     private List<CityAndInteger> toCityAndIntegerList(List<de.neebs.franchise.entity.CityCost> values) {

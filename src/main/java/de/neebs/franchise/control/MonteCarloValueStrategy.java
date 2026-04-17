@@ -102,12 +102,15 @@ public class MonteCarloValueStrategy implements TrainableStrategy {
      * HTTP requests trigger parallel game loops.
      */
     @Override
-    public synchronized void onGameComplete(List<GameState> trajectory,
-                                             Map<PlayerColor, Integer> finalScores,
-                                             Map<PlayerColor, String> playerStrategies) {
-        if (trajectory.size() < 2) return;
+    public synchronized TrainingTimings onGameComplete(List<GameState> trajectory,
+                                                       Map<PlayerColor, Integer> finalScores,
+                                                       Map<PlayerColor, String> playerStrategies,
+                                                       Map<PlayerColor, Map<String, Object>> playerParams) {
+        if (trajectory.size() < 2) return TrainingTimings.ZERO;
         int numPlayers = trajectory.get(0).getPlayers().size();
         NeuralNetwork network = modelService.getOrCreate(numPlayers);
+        long trainingStart = System.nanoTime();
+        boolean trained = false;
 
         for (int i = 0; i < trajectory.size() - 1; i++) {
             GameState before = trajectory.get(i);
@@ -138,9 +141,20 @@ public class MonteCarloValueStrategy implements TrainableStrategy {
             float target = (1.0f - progress) * incomeTarget + progress * influenceTarget;
 
             network.train(encoder.encode(after, mover), target, DEFAULT_LEARNING_RATE);
+            trained = true;
         }
 
+        if (!trained) return TrainingTimings.ZERO;
+        long trainingNanos = System.nanoTime() - trainingStart;
+        network.setTrainingRuns(network.getTrainingRuns() + 1);
+        long saveStart = System.nanoTime();
         modelService.save(network, numPlayers);
+        return new TrainingTimings(trainingNanos, System.nanoTime() - saveStart);
+    }
+
+    @Override
+    public long getTrainingRuns(int numPlayers) {
+        return modelService.getTrainingRuns(numPlayers);
     }
 
     // -------------------------------------------------------------------------

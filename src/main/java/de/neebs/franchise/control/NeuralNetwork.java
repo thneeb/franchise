@@ -14,6 +14,7 @@ public class NeuralNetwork {
     private int inputSize;
     private int hidden1Size;
     private int hidden2Size;
+    private long trainingRuns;
 
     private float[][] l1w;  // [h1][inputSize]
     private float[]   l1b;  // [h1]
@@ -188,4 +189,7 @@ public class NeuralNetwork {
 
     public float[] getL3b() { return l3b; }
     public void setL3b(float[] l3b) { this.l3b = l3b; }
+
+    public long getTrainingRuns() { return trainingRuns; }
+    public void setTrainingRuns(long trainingRuns) { this.trainingRuns = trainingRuns; }
 }

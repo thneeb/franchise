@@ -12,35 +12,38 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Loads and saves neural networks used by the self-play Q strategy.
+ * Loads and saves neural networks used by the Q-learning strategy.
  */
 @Service
 class SelfPlayQModelService {
 
-    private static final String MODEL_DIR = "self-play-q/";
-    private static final String MODEL_VERSION = "terminal-outcome-d099-v1";
+    private static final String MODEL_DIR = "q-learning/";
+    private static final String MODEL_VERSION = "d099-v2";
+    private static final String LEGACY_MODEL_DIR = "self-play-q/";
+    private static final String LEGACY_MODEL_VERSION = "terminal-outcome-d099-v1";
     private static final int HIDDEN1 = 256;
     private static final int HIDDEN2 = 128;
 
     private final ObjectMapper objectMapper;
-    private final Map<Integer, NeuralNetwork> cache = new ConcurrentHashMap<>();
+    private final Map<String, NeuralNetwork> cache = new ConcurrentHashMap<>();
 
     SelfPlayQModelService(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
-    NeuralNetwork getOrCreate(int numPlayers) {
-        return cache.computeIfAbsent(numPlayers, this::loadOrCreate);
+    NeuralNetwork getOrCreate(int numPlayers, QLearningTarget trainingTarget) {
+        return cache.computeIfAbsent(cacheKey(numPlayers, trainingTarget),
+                ignored -> loadOrCreate(numPlayers, trainingTarget));
     }
 
-    private NeuralNetwork loadOrCreate(int numPlayers) {
-        NeuralNetwork loaded = load(numPlayers);
+    private NeuralNetwork loadOrCreate(int numPlayers, QLearningTarget trainingTarget) {
+        NeuralNetwork loaded = load(numPlayers, trainingTarget);
         return loaded != null ? loaded
                 : new NeuralNetwork(StateEncoder.inputSize(numPlayers), HIDDEN1, HIDDEN2);
     }
 
-    private NeuralNetwork load(int numPlayers) {
-        File file = modelFile(numPlayers);
+    private NeuralNetwork load(int numPlayers, QLearningTarget trainingTarget) {
+        File file = modelFile(numPlayers, trainingTarget);
         if (file.exists()) {
             try {
                 return objectMapper.readValue(file, NeuralNetwork.class);
@@ -49,7 +52,21 @@ class SelfPlayQModelService {
             }
         }
         try {
-            ClassPathResource resource = new ClassPathResource(MODEL_DIR + fileName(numPlayers));
+            ClassPathResource resource = new ClassPathResource(MODEL_DIR + fileName(numPlayers, trainingTarget));
+            if (!resource.exists()) return loadLegacy(numPlayers, trainingTarget);
+            return objectMapper.readValue(resource.getInputStream(), NeuralNetwork.class);
+        } catch (IOException e) {
+            return loadLegacy(numPlayers, trainingTarget);
+        }
+    }
+
+    private NeuralNetwork loadLegacy(int numPlayers, QLearningTarget trainingTarget) {
+        if (trainingTarget != QLearningTarget.TERMINAL_OUTCOME) {
+            return null;
+        }
+        try {
+            ClassPathResource resource = new ClassPathResource(
+                    LEGACY_MODEL_DIR + legacyFileName(numPlayers));
             if (!resource.exists()) return null;
             return objectMapper.readValue(resource.getInputStream(), NeuralNetwork.class);
         } catch (IOException e) {
@@ -57,27 +74,39 @@ class SelfPlayQModelService {
         }
     }
 
-    synchronized void save(NeuralNetwork network, int numPlayers) {
+    synchronized void save(NeuralNetwork network, int numPlayers, QLearningTarget trainingTarget) {
         try {
-            File target = modelFile(numPlayers);
+            File target = modelFile(numPlayers, trainingTarget);
             target.getParentFile().mkdirs();
             File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(tmp, network);
             Files.move(tmp.toPath(), target.toPath(),
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            cache.put(numPlayers, network);
+            cache.put(cacheKey(numPlayers, trainingTarget), network);
         } catch (IOException e) {
             throw new IllegalStateException(
-                    "Failed to save self-play Q model for " + numPlayers + " players", e);
+                    "Failed to save Q-learning model for " + numPlayers + " players", e);
         }
     }
 
-    private File modelFile(int numPlayers) {
-        String projectRoot = System.getProperty("user.dir");
-        return new File(projectRoot, "src/main/resources/" + MODEL_DIR + fileName(numPlayers));
+    long getTrainingRuns(int numPlayers, QLearningTarget trainingTarget) {
+        return getOrCreate(numPlayers, trainingTarget).getTrainingRuns();
     }
 
-    private static String fileName(int numPlayers) {
-        return "self-play-q-model-" + numPlayers + "p-" + MODEL_VERSION + ".json";
+    private File modelFile(int numPlayers, QLearningTarget trainingTarget) {
+        String projectRoot = System.getProperty("user.dir");
+        return new File(projectRoot, "src/main/resources/" + MODEL_DIR + fileName(numPlayers, trainingTarget));
+    }
+
+    private static String fileName(int numPlayers, QLearningTarget trainingTarget) {
+        return "q-learning-model-" + numPlayers + "p-" + trainingTarget.modelKey() + "-" + MODEL_VERSION + ".json";
+    }
+
+    private static String legacyFileName(int numPlayers) {
+        return "self-play-q-model-" + numPlayers + "p-" + LEGACY_MODEL_VERSION + ".json";
+    }
+
+    private static String cacheKey(int numPlayers, QLearningTarget trainingTarget) {
+        return numPlayers + ":" + trainingTarget.name();
     }
 }

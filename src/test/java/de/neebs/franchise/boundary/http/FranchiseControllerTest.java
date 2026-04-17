@@ -905,9 +905,9 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.wins", hasSize(2)))
                 .andExpect(jsonPath("$.wins[0].value").isNumber())
                 .andExpect(jsonPath("$.wins[1].value").isNumber())
-                .andExpect(jsonPath("$.processingTimes", hasSize(2)))
-                .andExpect(jsonPath("$.processingTimes[*].color", containsInAnyOrder("RED", "BLUE")))
-                .andExpect(jsonPath("$.processingTimes[*].value",
+                .andExpect(jsonPath("$.runtimes.processingTimes", hasSize(2)))
+                .andExpect(jsonPath("$.runtimes.processingTimes[*].color", containsInAnyOrder("RED", "BLUE")))
+                .andExpect(jsonPath("$.runtimes.processingTimes[*].value",
                         everyItem(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}"))));
     }
 
@@ -933,14 +933,57 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.wins", hasSize(2)))
                 .andExpect(jsonPath("$.wins[*].color", containsInAnyOrder("RED", "BLUE")))
                 .andExpect(jsonPath("$.wins[*].value", everyItem(isA(Number.class))))
-                .andExpect(jsonPath("$.processingTimes", hasSize(2)))
-                .andExpect(jsonPath("$.processingTimes[*].color", containsInAnyOrder("RED", "BLUE")))
-                .andExpect(jsonPath("$.processingTimes[*].value",
+                .andExpect(jsonPath("$.runtimes.processingTimes", hasSize(2)))
+                .andExpect(jsonPath("$.runtimes.processingTimes[*].color", containsInAnyOrder("RED", "BLUE")))
+                .andExpect(jsonPath("$.runtimes.processingTimes[*].value",
                         everyItem(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}"))));
     }
 
     @Test
-    void playGame_selfPlayQTraining_returnsWinsAndProgress() throws Exception {
+    void playGame_qLearningTraining_returnsWinsAndProgress() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"timesToPlay":1,
+                                 "learningModels":["Q_LEARNING"],
+                                 "players":[
+                                   {"playerType":"COMPUTER","color":"RED","strategy":"Q_LEARNING","params":{"trainingTarget":"INFLUENCE"}},
+                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"Q_LEARNING","params":{"trainingTarget":"INFLUENCE"}}
+                                 ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wins", hasSize(2)))
+                .andExpect(jsonPath("$.wins[0].value").isNumber())
+                .andExpect(jsonPath("$.wins[1].value").isNumber())
+                .andExpect(jsonPath("$.runtimes.processingTimes", hasSize(2)))
+                .andExpect(jsonPath("$.runtimes.snapshotTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.trainingTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.modelSaveTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.otherTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.totalTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
+                .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
+                .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
+
+        mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").value(gameId))
+                .andExpect(jsonPath("$.wins", hasSize(2)))
+                .andExpect(jsonPath("$.runtimes.processingTimes", hasSize(2)))
+                .andExpect(jsonPath("$.runtimes.snapshotTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.trainingTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.modelSaveTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.otherTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.runtimes.totalTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
+                .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
+                .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
+    }
+
+    @Test
+    void playGame_selfPlayQAlias_mapsToQLearning() throws Exception {
         String gameId = createGame("RED", "BLUE");
 
         mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
@@ -954,15 +997,8 @@ class FranchiseControllerTest {
                                  ]}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.wins", hasSize(2)))
-                .andExpect(jsonPath("$.wins[0].value").isNumber())
-                .andExpect(jsonPath("$.wins[1].value").isNumber())
-                .andExpect(jsonPath("$.processingTimes", hasSize(2)));
-
-        mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.runId").value(gameId))
-                .andExpect(jsonPath("$.wins", hasSize(2)))
-                .andExpect(jsonPath("$.processingTimes", hasSize(2)));
+                .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
+                .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
+                .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
     }
 }

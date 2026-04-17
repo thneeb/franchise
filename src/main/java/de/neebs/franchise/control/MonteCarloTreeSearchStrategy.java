@@ -63,13 +63,15 @@ public class MonteCarloTreeSearchStrategy implements TrainableStrategy {
     }
 
     @Override
-    public synchronized void onGameComplete(List<GameState> trajectory,
-                                            Map<PlayerColor, Integer> finalScores,
-                                            Map<PlayerColor, String> playerStrategies) {
-        if (trajectory.size() < 2) return;
+    public synchronized TrainingTimings onGameComplete(List<GameState> trajectory,
+                                                       Map<PlayerColor, Integer> finalScores,
+                                                       Map<PlayerColor, String> playerStrategies,
+                                                       Map<PlayerColor, Map<String, Object>> playerParams) {
+        if (trajectory.size() < 2) return TrainingTimings.ZERO;
 
         int numPlayers = trajectory.get(0).getPlayers().size();
         NeuralNetwork network = modelService.getOrCreate(numPlayers);
+        long trainingStart = System.nanoTime();
 
         List<ValueTrainingSample> freshSamples = new ArrayList<>();
         for (int i = 0; i < trajectory.size() - 1; i++) {
@@ -81,15 +83,24 @@ public class MonteCarloTreeSearchStrategy implements TrainableStrategy {
                     outcomeFor(mover, finalScores)));
         }
 
-        if (freshSamples.isEmpty()) return;
+        if (freshSamples.isEmpty()) return TrainingTimings.ZERO;
 
         replayBuffer.addAll(freshSamples);
         for (int i = 0; i < DEFAULT_UPDATES_PER_GAME; i++) {
             List<ValueTrainingSample> batch = replayBuffer.sample(DEFAULT_BATCH_SIZE);
             network.trainBatch(batch, DEFAULT_LEARNING_RATE);
         }
+        long trainingNanos = System.nanoTime() - trainingStart;
 
+        network.setTrainingRuns(network.getTrainingRuns() + 1);
+        long saveStart = System.nanoTime();
         modelService.save(network, numPlayers);
+        return new TrainingTimings(trainingNanos, System.nanoTime() - saveStart);
+    }
+
+    @Override
+    public long getTrainingRuns(int numPlayers) {
+        return modelService.getTrainingRuns(numPlayers);
     }
 
     static float outcomeFor(PlayerColor player, Map<PlayerColor, Integer> finalScores) {

@@ -11,14 +11,15 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 /**
- * Self-play learner that estimates the long-term value of the state produced by a move.
+ * Q-learning strategy that estimates the long-term value of the state produced by a move.
  */
-@Component("SELF_PLAY_Q")
+@Component("Q_LEARNING")
 public class SelfPlayQStrategy implements TrainableStrategy {
 
-    private static final String STRATEGY_NAME = "SELF_PLAY_Q";
+    private static final String STRATEGY_NAME = "Q_LEARNING";
     private static final float DEFAULT_LEARNING_RATE = 0.001f;
     private static final int DEFAULT_BATCH_SIZE = 64;
     private static final int DEFAULT_UPDATES_PER_GAME = 8;
@@ -28,8 +29,12 @@ public class SelfPlayQStrategy implements TrainableStrategy {
     private final FranchiseService franchiseService;
     private final SelfPlayQModelService modelService;
     private final StateEncoder encoder = new StateEncoder();
-    private final ReplayBuffer<ValueTrainingSample> replayBuffer =
-            new ReplayBuffer<>(DEFAULT_REPLAY_CAPACITY);
+    private final Map<QLearningTarget, ReplayBuffer<ValueTrainingSample>> replayBuffers =
+            java.util.Arrays.stream(QLearningTarget.values()).collect(Collectors.toMap(
+                    target -> target,
+                    ignored -> new ReplayBuffer<>(DEFAULT_REPLAY_CAPACITY),
+                    (left, right) -> left,
+                    () -> new EnumMap<>(QLearningTarget.class)));
     private final Random random = new Random();
 
     public SelfPlayQStrategy(@Lazy FranchiseService franchiseService,
@@ -50,7 +55,8 @@ public class SelfPlayQStrategy implements TrainableStrategy {
             return moves.get(random.nextInt(moves.size()));
         }
 
-        NeuralNetwork network = modelService.getOrCreate(state.getPlayers().size());
+        QLearningTarget trainingTarget = QLearningTarget.fromParams(params);
+        NeuralNetwork network = modelService.getOrCreate(state.getPlayers().size(), trainingTarget);
         DrawRecord best = null;
         float bestScore = Float.NEGATIVE_INFINITY;
         for (DrawRecord move : moves) {
@@ -65,41 +71,51 @@ public class SelfPlayQStrategy implements TrainableStrategy {
     }
 
     @Override
-    public synchronized void onGameComplete(List<GameState> trajectory,
-                                            Map<PlayerColor, Integer> finalScores,
-                                            Map<PlayerColor, String> playerStrategies) {
-        if (trajectory.size() < 2) return;
+    public synchronized TrainingTimings onGameComplete(List<GameState> trajectory,
+                                                       Map<PlayerColor, Integer> finalScores,
+                                                       Map<PlayerColor, String> playerStrategies,
+                                                       Map<PlayerColor, Map<String, Object>> playerParams) {
+        if (trajectory.size() < 2) return TrainingTimings.ZERO;
 
         int numPlayers = trajectory.get(0).getPlayers().size();
-        NeuralNetwork network = modelService.getOrCreate(numPlayers);
+        long trainingStart = System.nanoTime();
+        long modelSaveNanos = 0L;
+        boolean trained = false;
 
-        Map<PlayerColor, Float> futureTargets = new EnumMap<>(PlayerColor.class);
-        for (PlayerColor player : trajectory.get(0).getPlayers()) {
-            futureTargets.put(player, outcomeFor(player, finalScores));
-        }
-
-        List<ValueTrainingSample> freshSamples = new ArrayList<>();
-        for (int i = trajectory.size() - 2; i >= 0; i--) {
-            GameState before = trajectory.get(i);
-            PlayerColor mover = before.getPlayers().get(before.getCurrentPlayerIndex());
-            float target = clamp01(
-                    DISCOUNT * futureTargets.getOrDefault(mover, outcomeFor(mover, finalScores)));
-
-            if (STRATEGY_NAME.equals(playerStrategies.get(mover))) {
-                freshSamples.add(new ValueTrainingSample(encoder.encode(trajectory.get(i + 1), mover), target));
+        for (QLearningTarget trainingTarget : QLearningTarget.values()) {
+            NeuralNetwork network = modelService.getOrCreate(numPlayers, trainingTarget);
+            ReplayBuffer<ValueTrainingSample> replayBuffer = replayBuffers.get(trainingTarget);
+            List<ValueTrainingSample> freshSamples = buildSamples(
+                    trajectory,
+                    finalScores,
+                    playerStrategies,
+                    playerParams,
+                    trainingTarget);
+            if (freshSamples.isEmpty()) {
+                continue;
             }
-            futureTargets.put(mover, target);
+
+            replayBuffer.addAll(freshSamples);
+            for (int i = 0; i < DEFAULT_UPDATES_PER_GAME; i++) {
+                List<ValueTrainingSample> batch = replayBuffer.sample(DEFAULT_BATCH_SIZE);
+                network.trainBatch(batch, DEFAULT_LEARNING_RATE);
+            }
+            network.setTrainingRuns(network.getTrainingRuns() + 1);
+            long saveStart = System.nanoTime();
+            modelService.save(network, numPlayers, trainingTarget);
+            modelSaveNanos += System.nanoTime() - saveStart;
+            trained = true;
         }
+        if (!trained) return TrainingTimings.ZERO;
+        long elapsedNanos = System.nanoTime() - trainingStart;
+        return new TrainingTimings(Math.max(0L, elapsedNanos - modelSaveNanos), modelSaveNanos);
+    }
 
-        if (freshSamples.isEmpty()) return;
-
-        replayBuffer.addAll(freshSamples);
-        for (int i = 0; i < DEFAULT_UPDATES_PER_GAME; i++) {
-            List<ValueTrainingSample> batch = replayBuffer.sample(DEFAULT_BATCH_SIZE);
-            network.trainBatch(batch, DEFAULT_LEARNING_RATE);
-        }
-
-        modelService.save(network, numPlayers);
+    @Override
+    public long getTrainingRuns(int numPlayers) {
+        long terminalRuns = modelService.getTrainingRuns(numPlayers, QLearningTarget.TERMINAL_OUTCOME);
+        long influenceRuns = modelService.getTrainingRuns(numPlayers, QLearningTarget.INFLUENCE);
+        return Math.max(terminalRuns, influenceRuns);
     }
 
     static float outcomeFor(PlayerColor player, Map<PlayerColor, Integer> finalScores) {
@@ -120,5 +136,62 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         Object value = params.get(key);
         if (value instanceof Number number) return number.floatValue();
         return defaultValue;
+    }
+
+    private List<ValueTrainingSample> buildSamples(List<GameState> trajectory,
+                                                   Map<PlayerColor, Integer> finalScores,
+                                                   Map<PlayerColor, String> playerStrategies,
+                                                   Map<PlayerColor, Map<String, Object>> playerParams,
+                                                   QLearningTarget trainingTarget) {
+        Map<PlayerColor, Float> futureTargets = initialFutureTargets(trajectory, finalScores, trainingTarget);
+        List<ValueTrainingSample> freshSamples = new ArrayList<>();
+
+        for (int i = trajectory.size() - 2; i >= 0; i--) {
+            GameState before = trajectory.get(i);
+            GameState after = trajectory.get(i + 1);
+            PlayerColor mover = before.getPlayers().get(before.getCurrentPlayerIndex());
+            float target = switch (trainingTarget) {
+                case TERMINAL_OUTCOME -> clamp01(
+                        DISCOUNT * futureTargets.getOrDefault(mover, outcomeFor(mover, finalScores)));
+                case INFLUENCE -> clamp01(
+                        influenceReward(before, after, mover, finalScores)
+                                + DISCOUNT * futureTargets.getOrDefault(mover, 0.0f));
+            };
+
+            if (STRATEGY_NAME.equals(playerStrategies.get(mover))
+                    && QLearningTarget.fromParams(playerParams.get(mover)) == trainingTarget) {
+                freshSamples.add(new ValueTrainingSample(encoder.encode(after, mover), target));
+            }
+            futureTargets.put(mover, target);
+        }
+        return freshSamples;
+    }
+
+    private Map<PlayerColor, Float> initialFutureTargets(List<GameState> trajectory,
+                                                         Map<PlayerColor, Integer> finalScores,
+                                                         QLearningTarget trainingTarget) {
+        Map<PlayerColor, Float> futureTargets = new EnumMap<>(PlayerColor.class);
+        for (PlayerColor player : trajectory.get(0).getPlayers()) {
+            futureTargets.put(player, switch (trainingTarget) {
+                case TERMINAL_OUTCOME -> outcomeFor(player, finalScores);
+                case INFLUENCE -> finalInfluenceShare(player, finalScores);
+            });
+        }
+        return futureTargets;
+    }
+
+    private float influenceReward(GameState before,
+                                  GameState after,
+                                  PlayerColor mover,
+                                  Map<PlayerColor, Integer> finalScores) {
+        int beforeInfluence = before.getScores().get(mover).getInfluence();
+        int afterInfluence = after.getScores().get(mover).getInfluence();
+        int totalFinalInfluence = Math.max(1, finalScores.values().stream().mapToInt(Integer::intValue).sum());
+        return Math.max(0.0f, (afterInfluence - beforeInfluence) / (float) totalFinalInfluence);
+    }
+
+    private float finalInfluenceShare(PlayerColor player, Map<PlayerColor, Integer> finalScores) {
+        int totalFinalInfluence = Math.max(1, finalScores.values().stream().mapToInt(Integer::intValue).sum());
+        return finalScores.getOrDefault(player, 0) / (float) totalFinalInfluence;
     }
 }

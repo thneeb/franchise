@@ -420,16 +420,40 @@ components:
           $ref: '#/components/schemas/PlayerColor'
         value:
           type: string
+    ComputerStrategyAndInteger:
+      properties:
+        strategy:
+          $ref: '#/components/schemas/ComputerStrategy'
+        value:
+          type: integer
     LearningResult:
       properties:
         wins:
           type: array
           items:
             $ref: '#/components/schemas/PlayerColorAndInteger'
+        runtimes:
+          $ref: '#/components/schemas/LearningRuntimes'
+        trainingRuns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComputerStrategyAndInteger'
+    LearningRuntimes:
+      properties:
         processingTimes:
           type: array
           items:
             $ref: '#/components/schemas/PlayerColorAndString'
+        snapshotTime:
+          type: string
+        trainingTime:
+          type: string
+        modelSaveTime:
+          type: string
+        otherTime:
+          type: string
+        totalTime:
+          type: string
     CalibrateConfig:
       properties:
         playerCount:
@@ -483,10 +507,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerColorAndInteger'
-        processingTimes:
+        runtimes:
+          $ref: '#/components/schemas/LearningRuntimes'
+        trainingRuns:
           type: array
           items:
-            $ref: '#/components/schemas/PlayerColorAndString'
+            $ref: '#/components/schemas/ComputerStrategyAndInteger'
         done:
           type: boolean
     BonusTileUsage:
