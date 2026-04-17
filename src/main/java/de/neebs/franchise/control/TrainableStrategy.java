@@ -2,6 +2,7 @@ package de.neebs.franchise.control;
 
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.PlayerColor;
+import de.neebs.franchise.entity.TrainingRunCount;
 
 import java.util.List;
 import java.util.Map;
@@ -22,5 +23,12 @@ public interface TrainableStrategy extends GameStrategy {
 
     default long getTrainingRuns(int numPlayers) {
         return 0L;
+    }
+
+    default List<TrainingRunCount> getTrainingRunCounts(int numPlayers,
+                                                        Map<PlayerColor, String> playerStrategies,
+                                                        Map<PlayerColor, Map<String, Object>> playerParams,
+                                                        String strategyName) {
+        return List.of(new TrainingRunCount(strategyName, null, getTrainingRuns(numPlayers)));
     }
 }

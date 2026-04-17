@@ -424,10 +424,29 @@ components:
       properties:
         strategy:
           $ref: '#/components/schemas/ComputerStrategy'
+        trainingTarget:
+          type: string
         value:
           type: integer
+    LearningPlayerConfig:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        strategy:
+          $ref: '#/components/schemas/ComputerStrategy'
+        params:
+          additionalProperties:
+            type: object
     LearningResult:
       properties:
+        learningModels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComputerStrategy'
+        playerConfigs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningPlayerConfig'
         wins:
           type: array
           items:
@@ -503,6 +522,14 @@ components:
           type: integer
         gamesTotal:
           type: integer
+        learningModels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComputerStrategy'
+        playerConfigs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LearningPlayerConfig'
         wins:
           type: array
           items:

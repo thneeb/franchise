@@ -456,19 +456,30 @@ public class FranchiseService {
         long trainingTimes = 0L;
         long modelSaveTimes = 0L;
         boolean training = !learningModels.isEmpty();
-        Map<String, Long> trainingRunCounts = new LinkedHashMap<>();
+        List<TrainingRunCount> trainingRunCounts = new ArrayList<>();
         if (training) {
             for (String modelName : learningModels) {
                 GameStrategy strategy = strategies.get(modelName);
                 if (strategy instanceof TrainableStrategy ts) {
-                    trainingRunCounts.put(modelName, ts.getTrainingRuns(players.size()));
+                    trainingRunCounts.addAll(ts.getTrainingRunCounts(
+                            players.size(),
+                            playerStrategies,
+                            playerParams,
+                            modelName));
                 }
             }
         }
 
         de.neebs.franchise.entity.LearningProgress progress = null;
         if (runId != null) {
-            progress = new de.neebs.franchise.entity.LearningProgress(runId, timesToPlay, players, trainingRunCounts);
+            progress = new de.neebs.franchise.entity.LearningProgress(
+                    runId,
+                    timesToPlay,
+                    players,
+                    trainingRunCounts,
+                    playerStrategies,
+                    playerParams,
+                    learningModels);
             learningRuns.put(runId, progress);
         }
         final de.neebs.franchise.entity.LearningProgress progressRef = progress;
@@ -527,11 +538,15 @@ public class FranchiseService {
                                     playerParams);
                             trainingTimes += timings.trainingNanos();
                             modelSaveTimes += timings.modelSaveNanos();
-                            trainingRunCounts.put(modelName, ts.getTrainingRuns(players.size()));
+                            trainingRunCounts = mergeTrainingRunCounts(trainingRunCounts, ts.getTrainingRunCounts(
+                                    players.size(),
+                                    playerStrategies,
+                                    playerParams,
+                                    modelName));
                             if (progressRef != null) {
                                 progressRef.recordTrainingTime(timings.trainingNanos());
                                 progressRef.recordModelSaveTime(timings.modelSaveNanos());
-                                progressRef.updateTrainingRuns(modelName, trainingRunCounts.get(modelName));
+                                trainingRunCounts.forEach(progressRef::updateTrainingRuns);
                             }
                         }
                     }
@@ -541,7 +556,19 @@ public class FranchiseService {
             }
         }
         return new LearningRunResult(wins, processingTimes, snapshotTimes, trainingTimes, modelSaveTimes,
-                System.nanoTime() - runStart, trainingRunCounts);
+                System.nanoTime() - runStart, trainingRunCounts, playerStrategies, playerParams, learningModels);
+    }
+
+    private static List<TrainingRunCount> mergeTrainingRunCounts(List<TrainingRunCount> existing,
+                                                                 List<TrainingRunCount> updates) {
+        Map<String, TrainingRunCount> merged = new LinkedHashMap<>();
+        existing.forEach(count -> merged.put(trainingRunKey(count), count));
+        updates.forEach(count -> merged.put(trainingRunKey(count), count));
+        return new ArrayList<>(merged.values());
+    }
+
+    private static String trainingRunKey(TrainingRunCount count) {
+        return count.strategy() + ":" + (count.trainingTarget() != null ? count.trainingTarget() : "");
     }
 
     private static String canonicalStrategyName(String strategyName) {
@@ -1075,17 +1102,23 @@ public class FranchiseService {
         // Tiebreaker: player with branch next to region tile
         PlayerColor tieBreaker = state.getRegionFirstScorer().get(region);
         int playerCount = state.getPlayers().size();
+        java.util.Set<PlayerColor> awardedPlayers = new java.util.LinkedHashSet<>();
 
-        awardRegionRank(state, region, sorted, 0, 1, tieBreaker, log, events);
+        PlayerColor firstPlace = awardRegionRank(state, region, sorted, 0, 1, tieBreaker, log, events);
+        if (firstPlace != null) {
+            awardedPlayers.add(firstPlace);
+        }
         if (playerCount > 2) {
-            awardRegionRank(state, region, sorted, 1, 2, tieBreaker, log, events);
+            PlayerColor secondPlace = awardRegionRank(state, region, sorted, 1, 2, tieBreaker, log, events);
+            if (secondPlace != null) {
+                awardedPlayers.add(secondPlace);
+            }
         }
         // Third value for all others with >= 1 branch
         int thirdValue = region.getByProfitLevel(3);
         for (Map.Entry<PlayerColor, Integer> e : sorted) {
             PlayerColor p = e.getKey();
-            // skip 1st and 2nd place players
-            if (isRank(sorted, p, 0, tieBreaker) || isRank(sorted, p, 1, tieBreaker)) continue;
+            if (awardedPlayers.contains(p)) continue;
             if (e.getValue() > 0) {
                 awardInfluence(state, p, thirdValue, region.getName() + " (3rd)", log, events);
             }
@@ -1105,17 +1138,18 @@ public class FranchiseService {
         log.add("Region " + region.getName() + " scored");
     }
 
-    private void awardRegionRank(GameState state, Region region,
-                                  List<Map.Entry<PlayerColor, Integer>> sorted,
-                                  int rank, int profitLevel,
-                                  PlayerColor tieBreaker, List<String> log,
-                                  List<InfluenceEvent> events) {
-        if (sorted.size() <= rank) return;
+    private PlayerColor awardRegionRank(GameState state, Region region,
+                                        List<Map.Entry<PlayerColor, Integer>> sorted,
+                                        int rank, int profitLevel,
+                                        PlayerColor tieBreaker, List<String> log,
+                                        List<InfluenceEvent> events) {
+        if (sorted.size() <= rank) return null;
         PlayerColor winner = resolveRankWinner(sorted, rank, tieBreaker);
-        if (winner == null) return;
+        if (winner == null) return null;
         int points = region.getByProfitLevel(profitLevel);
         awardInfluence(state, winner, points,
                 region.getName() + " (" + (rank == 0 ? "1st" : "2nd") + ")", log, events);
+        return winner;
     }
 
     private PlayerColor resolveRankWinner(List<Map.Entry<PlayerColor, Integer>> sorted,
@@ -1131,11 +1165,6 @@ public class FranchiseService {
         // Tiebreak: player whose branch is next to the region tile wins
         if (tieBreaker != null && tied.contains(tieBreaker)) return tieBreaker;
         return tied.get(0); // fallback
-    }
-
-    private boolean isRank(List<Map.Entry<PlayerColor, Integer>> sorted, PlayerColor p,
-                             int rank, PlayerColor tieBreaker) {
-        return p == resolveRankWinner(sorted, rank, tieBreaker);
     }
 
     // -------------------------------------------------------------------------

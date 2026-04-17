@@ -690,6 +690,89 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.winners", containsInAnyOrder("RED", "BLUE")));
     }
 
+    @Test
+    void regionScoring_twoPlayerGame_awardsThirdValueToSecondPlacePlayer() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        de.neebs.franchise.entity.GameState state = franchiseService.getGame(gameId);
+        state.setInitialization(false);
+        state.setRound(3);
+        state.setCurrentPlayerIndex(1); // BLUE triggers the region scoring
+
+        // Florida: BLUE first with 3 branches, RED second with 2 branches.
+        // In a 2-player game RED should receive the 3rd-place value (3), not nothing.
+        state.getCityBranches().get(de.neebs.franchise.entity.City.JACKSONVILLE)[0] =
+                de.neebs.franchise.entity.PlayerColor.RED;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.ATLANTA)[0] =
+                de.neebs.franchise.entity.PlayerColor.BLUE;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.ATLANTA)[1] =
+                de.neebs.franchise.entity.PlayerColor.BLUE;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.MONTGOMERY)[0] =
+                de.neebs.franchise.entity.PlayerColor.BLUE;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.HUNTSVILLE)[0] =
+                de.neebs.franchise.entity.PlayerColor.RED;
+        state.getClosedCities().add(de.neebs.franchise.entity.City.JACKSONVILLE);
+        state.getClosedCities().add(de.neebs.franchise.entity.City.ATLANTA);
+        state.getClosedCities().add(de.neebs.franchise.entity.City.MONTGOMERY);
+        state.getClosedCities().add(de.neebs.franchise.entity.City.HUNTSVILLE);
+        state.getRegionFirstScorer().put(
+                de.neebs.franchise.entity.Region.FLORIDA,
+                de.neebs.franchise.entity.PlayerColor.BLUE);
+
+        skipTurn(gameId, "BLUE");
+
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.players[?(@.color=='RED')].influence").value(contains(3)))
+                .andExpect(jsonPath("$.players[?(@.color=='BLUE')].influence").value(contains(greaterThanOrEqualTo(10))))
+                .andExpect(jsonPath("$.closedRegions", hasItem("FLORIDA")))
+                .andExpect(jsonPath("$.influenceByRound[*].entries[*].reason",
+                        hasItems("Florida (1st)", "Florida (3rd)", "Region track bonus")));
+    }
+
+    @Test
+    void regionScoring_threePlayerGame_awardsSecondAndThirdValues() throws Exception {
+        String gameId = createGame("RED", "BLUE", "WHITE");
+        de.neebs.franchise.entity.GameState state = franchiseService.getGame(gameId);
+        state.setInitialization(false);
+        state.setRound(4);
+        state.setCurrentPlayerIndex(2); // WHITE triggers the region scoring
+
+        // Florida counts:
+        // WHITE first with 3 branches, RED second with 2 branches, BLUE third with 1 branch.
+        state.getCityBranches().get(de.neebs.franchise.entity.City.JACKSONVILLE)[0] =
+                de.neebs.franchise.entity.PlayerColor.RED;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.JACKSONVILLE)[1] =
+                de.neebs.franchise.entity.PlayerColor.WHITE;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.ATLANTA)[0] =
+                de.neebs.franchise.entity.PlayerColor.WHITE;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.ATLANTA)[1] =
+                de.neebs.franchise.entity.PlayerColor.WHITE;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.ATLANTA)[2] =
+                de.neebs.franchise.entity.PlayerColor.BLUE;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.MONTGOMERY)[0] =
+                de.neebs.franchise.entity.PlayerColor.RED;
+        state.getCityBranches().get(de.neebs.franchise.entity.City.HUNTSVILLE)[0] =
+                de.neebs.franchise.entity.PlayerColor.WHITE;
+        state.getClosedCities().add(de.neebs.franchise.entity.City.JACKSONVILLE);
+        state.getClosedCities().add(de.neebs.franchise.entity.City.ATLANTA);
+        state.getClosedCities().add(de.neebs.franchise.entity.City.MONTGOMERY);
+        state.getClosedCities().add(de.neebs.franchise.entity.City.HUNTSVILLE);
+        state.getRegionFirstScorer().put(
+                de.neebs.franchise.entity.Region.FLORIDA,
+                de.neebs.franchise.entity.PlayerColor.WHITE);
+
+        skipTurn(gameId, "WHITE");
+
+        mockMvc.perform(get("/franchise/{gameId}", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.players[?(@.color=='WHITE')].influence").value(contains(greaterThanOrEqualTo(10))))
+                .andExpect(jsonPath("$.players[?(@.color=='RED')].influence").value(contains(6)))
+                .andExpect(jsonPath("$.players[?(@.color=='BLUE')].influence").value(contains(3)))
+                .andExpect(jsonPath("$.closedRegions", hasItem("FLORIDA")))
+                .andExpect(jsonPath("$.influenceByRound[*].entries[*].reason",
+                        hasItems("Florida (1st)", "Florida (2nd)", "Florida (3rd)", "Region track bonus")));
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
@@ -909,6 +992,15 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.runtimes.processingTimes[*].color", containsInAnyOrder("RED", "BLUE")))
                 .andExpect(jsonPath("$.runtimes.processingTimes[*].value",
                         everyItem(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}"))));
+
+        mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").value(gameId))
+                .andExpect(jsonPath("$.gamesCompleted").value(2))
+                .andExpect(jsonPath("$.gamesTotal").value(2))
+                .andExpect(jsonPath("$.done").value(true))
+                .andExpect(jsonPath("$.wins", hasSize(2)))
+                .andExpect(jsonPath("$.runtimes.processingTimes", hasSize(2)));
     }
 
     @Test
@@ -963,8 +1055,14 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.runtimes.modelSaveTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
                 .andExpect(jsonPath("$.runtimes.otherTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
                 .andExpect(jsonPath("$.runtimes.totalTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.learningModels", contains("Q_LEARNING")))
+                .andExpect(jsonPath("$.playerConfigs", hasSize(2)))
+                .andExpect(jsonPath("$.playerConfigs[*].strategy", contains("Q_LEARNING", "Q_LEARNING")))
+                .andExpect(jsonPath("$.playerConfigs[*].params.trainingTarget", contains("INFLUENCE", "INFLUENCE")))
+                .andExpect(jsonPath("$.playerConfigs[*].params.epsilon", contains(0.3, 0.3)))
                 .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
                 .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
+                .andExpect(jsonPath("$.trainingRuns[0].trainingTarget").value("INFLUENCE"))
                 .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
 
         mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
@@ -977,8 +1075,11 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.runtimes.modelSaveTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
                 .andExpect(jsonPath("$.runtimes.otherTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
                 .andExpect(jsonPath("$.runtimes.totalTime").value(matchesPattern("\\d{2}:\\d{2}:\\d{2},\\d{4}")))
+                .andExpect(jsonPath("$.learningModels", contains("Q_LEARNING")))
+                .andExpect(jsonPath("$.playerConfigs", hasSize(2)))
                 .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
                 .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
+                .andExpect(jsonPath("$.trainingRuns[0].trainingTarget").value("INFLUENCE"))
                 .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
     }
 
@@ -999,6 +1100,68 @@ class FranchiseControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
                 .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
+                .andExpect(jsonPath("$.trainingRuns[0].trainingTarget").value("TERMINAL_OUTCOME"))
                 .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
+    }
+
+    @Test
+    void playGame_qLearningTraining_reportsTrainingRunsPerTarget() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"timesToPlay":1,
+                                 "learningModels":["Q_LEARNING"],
+                                 "players":[
+                                   {"playerType":"COMPUTER","color":"RED","strategy":"Q_LEARNING","params":{"trainingTarget":"TERMINAL_OUTCOME"}},
+                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"Q_LEARNING","params":{"trainingTarget":"INFLUENCE"}}
+                                 ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trainingRuns", hasSize(2)))
+                .andExpect(jsonPath("$.trainingRuns[*].strategy", containsInAnyOrder("Q_LEARNING", "Q_LEARNING")))
+                .andExpect(jsonPath("$.trainingRuns[*].trainingTarget",
+                        containsInAnyOrder("TERMINAL_OUTCOME", "INFLUENCE")))
+                .andExpect(jsonPath("$.trainingRuns[*].value", everyItem(isA(Number.class))));
+
+        mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trainingRuns", hasSize(2)))
+                .andExpect(jsonPath("$.trainingRuns[*].trainingTarget",
+                        containsInAnyOrder("TERMINAL_OUTCOME", "INFLUENCE")))
+                .andExpect(jsonPath("$.trainingRuns[*].value", everyItem(isA(Number.class))));
+    }
+
+    @Test
+    void playGame_returnsEffectiveParamsWithDefaultsAndIgnoresTypos() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+
+        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"timesToPlay":1,
+                                 "learningModels":["Q_LEARNING"],
+                                 "players":[
+                                   {"playerType":"COMPUTER","color":"RED","strategy":"Q_LEARNING","params":{"epsilonn":0.9}},
+                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"MINIMAX","params":{"deph":5}}
+                                 ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.playerConfigs[*].color", containsInAnyOrder("RED", "BLUE")))
+                .andExpect(jsonPath("$.playerConfigs[*].params.epsilon", contains(0.3)))
+                .andExpect(jsonPath("$.playerConfigs[*].params.trainingTarget", contains("TERMINAL_OUTCOME")))
+                .andExpect(jsonPath("$.playerConfigs[*].params.epsilonn").doesNotExist())
+                .andExpect(jsonPath("$.playerConfigs[*].params.depth", contains(3)))
+                .andExpect(jsonPath("$.playerConfigs[*].params.evalMode", contains("BALANCED")))
+                .andExpect(jsonPath("$.playerConfigs[*].params.incomeWeight", contains(2)))
+                .andExpect(jsonPath("$.playerConfigs[*].params.deph").doesNotExist());
+
+        mockMvc.perform(get("/franchise/{gameId}/learnings", gameId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.playerConfigs[*].params.epsilon", contains(0.3)))
+                .andExpect(jsonPath("$.playerConfigs[*].params.trainingTarget", contains("TERMINAL_OUTCOME")))
+                .andExpect(jsonPath("$.playerConfigs[*].params.depth", contains(3)))
+                .andExpect(jsonPath("$.playerConfigs[*].params.deph").doesNotExist());
     }
 }

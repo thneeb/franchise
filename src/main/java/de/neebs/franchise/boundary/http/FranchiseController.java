@@ -12,6 +12,7 @@ import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.InfluenceEvent;
 import de.neebs.franchise.entity.LearningRunResult;
 import de.neebs.franchise.entity.Score;
+import de.neebs.franchise.entity.TrainingRunCount;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -100,7 +102,9 @@ public class FranchiseController implements FranchiseApi {
         Map<de.neebs.franchise.entity.PlayerColor, String> strategies = playConfig.getPlayers().stream()
                 .collect(Collectors.toMap(
                         cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()),
-                        cp -> canonicalStrategyName(cp.getStrategy())));
+                        cp -> canonicalStrategyName(cp.getStrategy()),
+                        (left, right) -> right,
+                        LinkedHashMap::new));
 
         // Per-player params override global params; fall back to global then empty map
         Map<String, Object> globalParams = playConfig.getParams() != null ? playConfig.getParams() : Map.of();
@@ -108,14 +112,16 @@ public class FranchiseController implements FranchiseApi {
                 playConfig.getPlayers().stream()
                         .collect(Collectors.toMap(
                                 cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()),
-                                cp -> cp.getParams() != null ? cp.getParams() : globalParams));
+                                cp -> cp.getParams() != null ? cp.getParams() : globalParams,
+                                (left, right) -> right,
+                                LinkedHashMap::new));
 
         int times = playConfig.getTimesToPlay() != null ? playConfig.getTimesToPlay() : 1;
 
         Set<String> learningModels = playConfig.getLearningModels() != null
                 ? playConfig.getLearningModels().stream()
                         .map(this::canonicalStrategyName)
-                        .collect(Collectors.toSet())
+                        .collect(Collectors.toCollection(LinkedHashSet::new))
                 : Set.of();
 
         // Auto-inject epsilon=0.3 for any player whose strategy is being trained,
@@ -132,15 +138,21 @@ public class FranchiseController implements FranchiseApi {
                                     return merged;
                                 }
                                 return e.getValue();
-                            }));
+                            },
+                            (left, right) -> right,
+                            LinkedHashMap::new));
         }
 
-        String runId = learningModels.isEmpty() ? null : gameId;
+        playerParams = normalizePlayerParams(strategies, playerParams);
+
+        String runId = gameId;
 
         LearningRunResult result =
                 franchiseService.runGames(players, strategies, playerParams, learningModels, runId, times);
 
         LearningResult model = new LearningResult()
+                .learningModels(toComputerStrategies(result.getLearningModels()))
+                .playerConfigs(toLearningPlayerConfigs(result.getPlayerStrategies(), result.getPlayerParams()))
                 .wins(result.getWins().entrySet().stream()
                 .map(e -> new PlayerColorAndInteger()
                         .color(PlayerColor.valueOf(e.getKey().name()))
@@ -152,7 +164,7 @@ public class FranchiseController implements FranchiseApi {
                         result.getTrainingTimeNanos(),
                         result.getModelSaveTimeNanos(),
                         result.getTotalTimeNanos()))
-                .trainingRuns(toComputerStrategyAndIntegerList(result.getTrainingRuns()));
+                .trainingRuns(toTrainingRuns(result.getTrainingRuns()));
         return ResponseEntity.ok(model);
     }
 
@@ -345,6 +357,8 @@ public class FranchiseController implements FranchiseApi {
                         .runId(progress.getRunId())
                         .gamesCompleted(progress.getGamesCompleted())
                         .gamesTotal(progress.getGamesTotal())
+                        .learningModels(toComputerStrategies(progress.getLearningModels()))
+                        .playerConfigs(toLearningPlayerConfigs(progress.getPlayerStrategies(), progress.getPlayerParams()))
                         .wins(progress.getWins().entrySet().stream()
                                 .map(e -> new PlayerColorAndInteger()
                                         .color(PlayerColor.valueOf(e.getKey().name()))
@@ -356,7 +370,7 @@ public class FranchiseController implements FranchiseApi {
                                 progress.getTrainingTimeNanos(),
                                 progress.getModelSaveTimeNanos(),
                                 progress.getTotalTimeNanos()))
-                        .trainingRuns(toComputerStrategyAndIntegerList(progress.getTrainingRuns()))
+                        .trainingRuns(toTrainingRuns(progress.getTrainingRuns()))
                         .done(progress.isDone());
         return ResponseEntity.ok(model);
     }
@@ -424,16 +438,91 @@ public class FranchiseController implements FranchiseApi {
                 .collect(Collectors.toList());
     }
 
-    private List<ComputerStrategyAndInteger> toComputerStrategyAndIntegerList(Map<String, Long> values) {
-        return values.entrySet().stream()
+    private List<ComputerStrategyAndInteger> toTrainingRuns(List<TrainingRunCount> values) {
+        return values.stream()
                 .map(e -> new ComputerStrategyAndInteger()
-                        .strategy(ComputerStrategy.valueOf(e.getKey()))
-                        .value(Math.toIntExact(e.getValue())))
+                        .strategy(ComputerStrategy.valueOf(e.strategy()))
+                        .trainingTarget(e.trainingTarget())
+                        .value(Math.toIntExact(e.value())))
                 .toList();
     }
 
     private String canonicalStrategyName(ComputerStrategy strategy) {
         return strategy == ComputerStrategy.SELF_PLAY_Q ? ComputerStrategy.Q_LEARNING.name() : strategy.name();
+    }
+
+    private Map<de.neebs.franchise.entity.PlayerColor, Map<String, Object>> normalizePlayerParams(
+            Map<de.neebs.franchise.entity.PlayerColor, String> strategies,
+            Map<de.neebs.franchise.entity.PlayerColor, Map<String, Object>> playerParams) {
+        return playerParams.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> normalizeParams(strategies.get(e.getKey()), e.getValue()),
+                        (left, right) -> right,
+                        LinkedHashMap::new));
+    }
+
+    private Map<String, Object> normalizeParams(String strategy, Map<String, Object> params) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        if ("MINIMAX".equals(strategy) || "AB_PRUNE".equals(strategy)) {
+            normalized.put("depth", parseInt(params, "depth", 3));
+            normalized.put("evalMode", parseString(params, "evalMode", "BALANCED"));
+            normalized.put("incomeWeight", parseInt(params, "incomeWeight", 2));
+            return normalized;
+        }
+        if ("MONTE_CARLO_TREE_SEARCH".equals(strategy)) {
+            normalized.put("epsilon", parseDouble(params, "epsilon", 0.0));
+            normalized.put("simulations", parseInt(params, "simulations", 96));
+            normalized.put("exploration", parseDouble(params, "exploration", 1.4));
+            return normalized;
+        }
+        if ("MONTE_CARLO_VALUE".equals(strategy)) {
+            normalized.put("epsilon", parseDouble(params, "epsilon", 0.0));
+            return normalized;
+        }
+        if ("Q_LEARNING".equals(strategy)) {
+            normalized.put("epsilon", parseDouble(params, "epsilon", 0.0));
+            normalized.put("trainingTarget", parseString(params, "trainingTarget", "TERMINAL_OUTCOME"));
+            return normalized;
+        }
+        return params != null ? new LinkedHashMap<>(params) : Map.of();
+    }
+
+    private List<ComputerStrategy> toComputerStrategies(Set<String> learningModels) {
+        return learningModels.stream()
+                .map(ComputerStrategy::valueOf)
+                .toList();
+    }
+
+    private List<LearningPlayerConfig> toLearningPlayerConfigs(Map<String, String> strategies,
+                                                               Map<String, Map<String, Object>> paramsByPlayer) {
+        return strategies.entrySet().stream()
+                .map(e -> new LearningPlayerConfig()
+                        .color(PlayerColor.valueOf(e.getKey()))
+                        .strategy(ComputerStrategy.valueOf(e.getValue()))
+                        .params(new LinkedHashMap<>(paramsByPlayer.getOrDefault(e.getKey(), Map.of()))))
+                .toList();
+    }
+
+    private static int parseInt(Map<String, Object> params, String key, int defaultValue) {
+        if (params == null) return defaultValue;
+        Object value = params.get(key);
+        if (value instanceof Number number) return number.intValue();
+        return defaultValue;
+    }
+
+    private static double parseDouble(Map<String, Object> params, String key, double defaultValue) {
+        if (params == null) return defaultValue;
+        Object value = params.get(key);
+        if (value instanceof Number number) return number.doubleValue();
+        return defaultValue;
+    }
+
+    private static String parseString(Map<String, Object> params, String key, String defaultValue) {
+        if (params == null) return defaultValue;
+        Object value = params.get(key);
+        if (value instanceof String string && !string.isBlank()) return string;
+        return defaultValue;
     }
 
     private LearningRuntimes toLearningRuntimes(Map<de.neebs.franchise.entity.PlayerColor, Long> processingTimes,

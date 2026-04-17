@@ -3,14 +3,17 @@ package de.neebs.franchise.control;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.PlayerColor;
+import de.neebs.franchise.entity.TrainingRunCount;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -80,9 +83,10 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         int numPlayers = trajectory.get(0).getPlayers().size();
         long trainingStart = System.nanoTime();
         long modelSaveNanos = 0L;
+        Set<QLearningTarget> activeTargets = activeTargets(playerStrategies, playerParams);
         boolean trained = false;
 
-        for (QLearningTarget trainingTarget : QLearningTarget.values()) {
+        for (QLearningTarget trainingTarget : activeTargets) {
             NeuralNetwork network = modelService.getOrCreate(numPlayers, trainingTarget);
             ReplayBuffer<ValueTrainingSample> replayBuffer = replayBuffers.get(trainingTarget);
             List<ValueTrainingSample> freshSamples = buildSamples(
@@ -116,6 +120,19 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         long terminalRuns = modelService.getTrainingRuns(numPlayers, QLearningTarget.TERMINAL_OUTCOME);
         long influenceRuns = modelService.getTrainingRuns(numPlayers, QLearningTarget.INFLUENCE);
         return Math.max(terminalRuns, influenceRuns);
+    }
+
+    @Override
+    public List<TrainingRunCount> getTrainingRunCounts(int numPlayers,
+                                                       Map<PlayerColor, String> playerStrategies,
+                                                       Map<PlayerColor, Map<String, Object>> playerParams,
+                                                       String strategyName) {
+        return activeTargets(playerStrategies, playerParams).stream()
+                .map(trainingTarget -> new TrainingRunCount(
+                        strategyName,
+                        trainingTarget.name(),
+                        modelService.getTrainingRuns(numPlayers, trainingTarget)))
+                .toList();
     }
 
     static float outcomeFor(PlayerColor player, Map<PlayerColor, Integer> finalScores) {
@@ -193,5 +210,17 @@ public class SelfPlayQStrategy implements TrainableStrategy {
     private float finalInfluenceShare(PlayerColor player, Map<PlayerColor, Integer> finalScores) {
         int totalFinalInfluence = Math.max(1, finalScores.values().stream().mapToInt(Integer::intValue).sum());
         return finalScores.getOrDefault(player, 0) / (float) totalFinalInfluence;
+    }
+
+    private Set<QLearningTarget> activeTargets(Map<PlayerColor, String> playerStrategies,
+                                               Map<PlayerColor, Map<String, Object>> playerParams) {
+        Set<QLearningTarget> activeTargets = new LinkedHashSet<>();
+        for (Map.Entry<PlayerColor, String> entry : playerStrategies.entrySet()) {
+            if (!STRATEGY_NAME.equals(entry.getValue())) {
+                continue;
+            }
+            activeTargets.add(QLearningTarget.fromParams(playerParams.get(entry.getKey())));
+        }
+        return activeTargets;
     }
 }

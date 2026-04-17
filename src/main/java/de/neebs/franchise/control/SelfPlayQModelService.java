@@ -18,7 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 class SelfPlayQModelService {
 
     private static final String MODEL_DIR = "q-learning/";
-    private static final String MODEL_VERSION = "d099-v2";
+    private static final String TERMINAL_OUTCOME_MODEL_VERSION = "d099-v1";
+    private static final String INFLUENCE_MODEL_VERSION = "d099-v1";
+    private static final String PREVIOUS_MODEL_VERSION = "d099-v2";
     private static final String LEGACY_MODEL_DIR = "self-play-q/";
     private static final String LEGACY_MODEL_VERSION = "terminal-outcome-d099-v1";
     private static final int HIDDEN1 = 256;
@@ -43,6 +45,7 @@ class SelfPlayQModelService {
     }
 
     private NeuralNetwork load(int numPlayers, QLearningTarget trainingTarget) {
+        migrateLegacyModelIfNeeded(numPlayers, trainingTarget);
         File file = modelFile(numPlayers, trainingTarget);
         if (file.exists()) {
             try {
@@ -50,6 +53,10 @@ class SelfPlayQModelService {
             } catch (IOException e) {
                 // Fall through to the classpath fallback.
             }
+        }
+        NeuralNetwork previousModel = loadPreviousVersion(numPlayers, trainingTarget);
+        if (previousModel != null) {
+            return previousModel;
         }
         try {
             ClassPathResource resource = new ClassPathResource(MODEL_DIR + fileName(numPlayers, trainingTarget));
@@ -64,6 +71,10 @@ class SelfPlayQModelService {
         if (trainingTarget != QLearningTarget.TERMINAL_OUTCOME) {
             return null;
         }
+        NeuralNetwork renamedLegacy = loadRenamedLegacy(numPlayers, trainingTarget);
+        if (renamedLegacy != null) {
+            return renamedLegacy;
+        }
         try {
             ClassPathResource resource = new ClassPathResource(
                     LEGACY_MODEL_DIR + legacyFileName(numPlayers));
@@ -76,6 +87,7 @@ class SelfPlayQModelService {
 
     synchronized void save(NeuralNetwork network, int numPlayers, QLearningTarget trainingTarget) {
         try {
+            migrateLegacyModelIfNeeded(numPlayers, trainingTarget);
             File target = modelFile(numPlayers, trainingTarget);
             target.getParentFile().mkdirs();
             File tmp = new File(target.getParentFile(), target.getName() + ".tmp");
@@ -98,15 +110,90 @@ class SelfPlayQModelService {
         return new File(projectRoot, "src/main/resources/" + MODEL_DIR + fileName(numPlayers, trainingTarget));
     }
 
+    private File legacyModelFile(int numPlayers) {
+        String projectRoot = System.getProperty("user.dir");
+        return new File(projectRoot, "src/main/resources/" + LEGACY_MODEL_DIR + legacyFileName(numPlayers));
+    }
+
+    private File renamedLegacyModelFile(int numPlayers, QLearningTarget trainingTarget) {
+        String projectRoot = System.getProperty("user.dir");
+        return new File(projectRoot,
+                "src/main/resources/" + MODEL_DIR + fileName(numPlayers, trainingTarget));
+    }
+
+    private File previousModelFile(int numPlayers, QLearningTarget trainingTarget) {
+        String projectRoot = System.getProperty("user.dir");
+        return new File(projectRoot,
+                "src/main/resources/" + MODEL_DIR + previousVersionFileName(numPlayers, trainingTarget));
+    }
+
     private static String fileName(int numPlayers, QLearningTarget trainingTarget) {
-        return "q-learning-model-" + numPlayers + "p-" + trainingTarget.modelKey() + "-" + MODEL_VERSION + ".json";
+        return "q-learning-model-" + numPlayers + "p-" + trainingTarget.modelKey() + "-" + modelVersion(trainingTarget) + ".json";
     }
 
     private static String legacyFileName(int numPlayers) {
         return "self-play-q-model-" + numPlayers + "p-" + LEGACY_MODEL_VERSION + ".json";
     }
 
+    private static String previousVersionFileName(int numPlayers, QLearningTarget trainingTarget) {
+        return "q-learning-model-" + numPlayers + "p-" + trainingTarget.modelKey() + "-" + PREVIOUS_MODEL_VERSION + ".json";
+    }
+
     private static String cacheKey(int numPlayers, QLearningTarget trainingTarget) {
         return numPlayers + ":" + trainingTarget.name();
+    }
+
+    private void migrateLegacyModelIfNeeded(int numPlayers, QLearningTarget trainingTarget) {
+        if (trainingTarget != QLearningTarget.TERMINAL_OUTCOME) {
+            return;
+        }
+
+        File legacy = legacyModelFile(numPlayers);
+        File renamedLegacy = renamedLegacyModelFile(numPlayers, trainingTarget);
+        if (!legacy.exists() || renamedLegacy.exists()) {
+            return;
+        }
+
+        try {
+            renamedLegacy.getParentFile().mkdirs();
+            Files.move(legacy.toPath(), renamedLegacy.toPath(), StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException moveFailed) {
+            try {
+                Files.copy(legacy.toPath(), renamedLegacy.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException copyFailed) {
+                throw new IllegalStateException("Failed to rename legacy Q-learning model for " + numPlayers + " players", copyFailed);
+            }
+        }
+    }
+
+    private NeuralNetwork loadRenamedLegacy(int numPlayers, QLearningTarget trainingTarget) {
+        File file = renamedLegacyModelFile(numPlayers, trainingTarget);
+        if (!file.exists()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(file, NeuralNetwork.class);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private NeuralNetwork loadPreviousVersion(int numPlayers, QLearningTarget trainingTarget) {
+        File file = previousModelFile(numPlayers, trainingTarget);
+        if (!file.exists()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(file, NeuralNetwork.class);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static String modelVersion(QLearningTarget trainingTarget) {
+        return switch (trainingTarget) {
+            case TERMINAL_OUTCOME -> TERMINAL_OUTCOME_MODEL_VERSION;
+            case INFLUENCE -> INFLUENCE_MODEL_VERSION;
+        };
     }
 }
