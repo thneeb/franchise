@@ -13,6 +13,7 @@ public class FranchiseService {
 
     private static final int INITIAL_SUPPLY = 40;
     private static final int RED_ZONE_INDEX = 8; // red zone = positions 8-10 (1-indexed); game ends when 1st tile reaches position 8, i.e. regionTrackIndex reaches 8
+    private static final int MAX_DRAWS_PER_GAME = 120;
 
     private final Map<String, GameState> games = new ConcurrentHashMap<>();
     private final Map<String, de.neebs.franchise.entity.LearningProgress> learningRuns = new ConcurrentHashMap<>();
@@ -71,6 +72,7 @@ public class FranchiseService {
         }
 
         state.getDrawHistory().add(draw);
+        checkDrawLimitLoss(state, player);
         state.getInfluenceHistory().addAll(influenceEvents);
         return new DrawResult(draw, income, influenceLog, influenceEvents,
                 state.getScores().get(player).getMoney(), state.isEnd(), getWinners(state), costSummary,
@@ -204,8 +206,13 @@ public class FranchiseService {
         return state.getDrawHistory().get(index);
     }
 
-    // Returns all legal draws for an arbitrary state (used by AI strategies)
+    // Returns all legal draws for an arbitrary state.
     public List<DrawRecord> getPossibleDrawsForState(GameState state) {
+        return getPossibleDrawsFromState(state);
+    }
+
+    // AI-only move generation: if any move expands into a new city, require expansion.
+    public List<DrawRecord> getPossibleStrategyDrawsForState(GameState state) {
         return getPossibleDrawsFromState(state);
     }
 
@@ -230,6 +237,7 @@ public class FranchiseService {
             applyNormalDrawFast(state, player, draw, myCities, costMap);
         }
         state.getDrawHistory().add(draw);
+        checkDrawLimitLoss(state, player);
     }
 
     // Fast path for simulation: skip all validation, use precomputed costs.
@@ -241,7 +249,6 @@ public class FranchiseService {
 
         int income = calcIncome(state, player);
         Score score = state.getScores().get(player);
-        int availableMoney = score.getMoney() + income; // before bonus — used for skip-end check
 
         if (bonus != null) {
             score.setBonusTiles(score.getBonusTiles() - 1);
@@ -298,11 +305,6 @@ public class FranchiseService {
             state.setEnd(true);
         }
 
-        // Game end check (all players unable to expand consecutively)
-        if (!state.isEnd()) {
-            updateConsecutiveSkipCounter(state, player, extensions, availableMoney, log, events);
-        }
-
         // Advance turn
         state.setCurrentPlayerIndex(
                 (state.getCurrentPlayerIndex() + 1) % state.getPlayers().size());
@@ -340,10 +342,6 @@ public class FranchiseService {
         DrawResult result = applyDraw(gameId, best);
         return result.withProcessingTimeNanos(System.nanoTime() - start);
     }
-
-    // Runs timesToPlay full headless games and returns win counts per player
-    // Maximum turns before a headless game is cut short (same guard as in CalibrationService)
-    private static final int MAX_HEADLESS_GAME_TURNS = 120;
 
     public de.neebs.franchise.entity.LearningProgress getLearningProgress(String runId) {
         return learningRuns.get(runId);
@@ -397,9 +395,8 @@ public class FranchiseService {
             GameState state = buildInitialState(tmpId, players);
             games.put(tmpId, state);
             List<GameState> trajectory = training ? new ArrayList<>() : null;
-            int turns = 0;
             try {
-                while (!games.get(tmpId).isEnd() && turns < MAX_HEADLESS_GAME_TURNS) {
+                while (!games.get(tmpId).isEnd()) {
                     if (training) {
                         long snapshotStart = System.nanoTime();
                         trajectory.add(games.get(tmpId).deepCopy());
@@ -415,7 +412,6 @@ public class FranchiseService {
                     if (progressRef != null) {
                         progressRef.recordProcessingTime(current, result.getProcessingTimeNanos());
                     }
-                    turns++;
                 }
                 if (training) {
                     long snapshotStart = System.nanoTime();
@@ -695,18 +691,26 @@ public class FranchiseService {
             state.setEnd(true);
         }
 
-        // Game end check (all players unable to expand consecutively)
-        if (!state.isEnd()) {
-            updateConsecutiveSkipCounter(state, player, extensions,
-                    costs.getCurrentMoney() + costs.getIncome(), log, events);
-        }
-
         // Advance turn
         state.setCurrentPlayerIndex(
                 (state.getCurrentPlayerIndex() + 1) % state.getPlayers().size());
         state.setRound(state.getRound() + 1);
 
         return costs.getIncome();
+    }
+
+    private void checkDrawLimitLoss(GameState state, PlayerColor player) {
+        if (state.isEnd() || state.getDrawHistory().size() < MAX_DRAWS_PER_GAME) {
+            return;
+        }
+
+        int lowestOtherInfluence = state.getScores().entrySet().stream()
+                .filter(entry -> entry.getKey() != player)
+                .mapToInt(entry -> entry.getValue().getInfluence())
+                .min()
+                .orElse(0);
+        state.getScores().get(player).setInfluence(lowestOtherInfluence - 1);
+        state.setEnd(true);
     }
 
     // -------------------------------------------------------------------------
@@ -1074,36 +1078,6 @@ public class FranchiseService {
     // -------------------------------------------------------------------------
     // Final scoring
     // -------------------------------------------------------------------------
-
-    /**
-     * Updates the consecutive-skip counter and ends the game if all players in a row
-     * were genuinely unable to expand (no affordable reachable city).
-     * Resets the counter when the player expanded OR when they chose to skip but could
-     * have afforded at least one expansion (i.e. they are saving up).
-     */
-    private void updateConsecutiveSkipCounter(GameState state, PlayerColor player,
-                                               List<City> extensions, int availableMoney,
-                                               List<String> log, List<InfluenceEvent> events) {
-        if (!extensions.isEmpty()) {
-            state.setConsecutiveSkipsWithoutExpansion(0);
-            return;
-        }
-        // Player skipped — determine whether they were forced to or chose to
-        Set<City> myCities = citiesWithPresence(state, player);
-        Set<City> targets = validExpansionTargetsFrom(state, player, myCities);
-        Map<City, Integer> costMap = expansionCostMap(myCities, targets);
-        boolean couldExpand = costMap.values().stream().anyMatch(c -> availableMoney >= c);
-        if (couldExpand) {
-            state.setConsecutiveSkipsWithoutExpansion(0);
-        } else {
-            int count = state.getConsecutiveSkipsWithoutExpansion() + 1;
-            state.setConsecutiveSkipsWithoutExpansion(count);
-            if (count >= state.getPlayers().size()) {
-                doFinalScoring(state, log, events);
-                state.setEnd(true);
-            }
-        }
-    }
 
     private void doFinalScoring(GameState state, List<String> log, List<InfluenceEvent> events) {
         // +1 per branch in small town (skip neutral-color fillers used for inactive regions)

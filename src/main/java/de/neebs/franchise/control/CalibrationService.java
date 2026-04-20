@@ -124,27 +124,22 @@ public class CalibrationService {
         }
     }
 
-    // Maximum turns before game is cut short (prevents infinite games when AI always skips)
-    private static final int MAX_GAME_TURNS = 120;
-
     private PlayerColor playOneGame(List<PlayerColor> players, EvalParams firstParams,
                                      EvalParams secondParams, int depth) {
         // Build a transient game state (not stored in games map)
         String tmpId = UUID.randomUUID().toString();
         GameState state = franchiseService.buildInitialStatePublic(tmpId, players);
 
-        int turns = 0;
         // Play the game without storing it — use applyDrawOnState for simulation
-        while (!state.isEnd() && turns < MAX_GAME_TURNS) {
+        while (!state.isEnd()) {
             PlayerColor current = state.getPlayers().get(state.getCurrentPlayerIndex());
             // players[0] uses firstParams, others use secondParams
             EvalParams params = current == players.get(0) ? firstParams : secondParams;
             Map<String, Object> moveParams = buildParams(params, depth);
 
-            List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
+            List<DrawRecord> moves = franchiseService.getPossibleStrategyDrawsForState(state);
             DrawRecord best = selectBestMove(state, current, moves, depth, moveParams);
             state = franchiseService.applyDrawOnState(state, best);
-            turns++;
         }
 
         // Winner = highest influence (ties broken by money)
@@ -181,7 +176,7 @@ public class CalibrationService {
             return MinimaxStrategy.evaluate(state, params);
         }
         PlayerColor mover = state.getPlayers().get(state.getCurrentPlayerIndex());
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
+        List<DrawRecord> moves = franchiseService.getPossibleStrategyDrawsForState(state);
         if (moves.isEmpty()) {
             return MinimaxStrategy.evaluate(state, params);
         }
