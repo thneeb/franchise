@@ -27,7 +27,7 @@ public class RandomStrategy implements GameStrategy {
 
     @Override
     public DrawRecord selectDraw(GameState state, PlayerColor player, Map<String, Object> params) {
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
+        List<DrawRecord> moves = franchiseService.getPossibleStrategyDrawsForState(state);
         if (moves.isEmpty()) {
             throw new IllegalStateException("No legal draws available for " + player);
         }

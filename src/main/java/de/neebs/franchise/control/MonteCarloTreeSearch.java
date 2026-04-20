@@ -120,7 +120,7 @@ class MonteCarloTreeSearch {
 
         void expand(FranchiseService franchiseService) {
             if (expanded || isTerminal()) return;
-            for (DrawRecord move : franchiseService.getPossibleDrawsForState(state)) {
+            for (DrawRecord move : franchiseService.getPossibleStrategyDrawsForState(state)) {
                 GameState next = franchiseService.applyDrawOnState(state, move);
                 children.add(new SearchNode(next, move));
             }
