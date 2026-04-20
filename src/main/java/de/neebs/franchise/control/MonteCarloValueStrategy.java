@@ -53,7 +53,7 @@ public class MonteCarloValueStrategy implements TrainableStrategy {
 
     @Override
     public DrawRecord selectDraw(GameState state, PlayerColor player, Map<String, Object> params) {
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
         if (moves.isEmpty()) {
             throw new IllegalStateException("No legal draws available for " + player);
         }

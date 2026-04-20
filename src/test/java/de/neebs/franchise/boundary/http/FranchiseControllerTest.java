@@ -480,6 +480,24 @@ class FranchiseControllerTest {
     }
 
     @Test
+    void aiMoveGeneration_includesExtensionBonusPairs() throws Exception {
+        String gameId = createGame("RED", "BLUE");
+        performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
+        performInitDraw(gameId, "RED", "MEMPHIS");
+        skipTurn(gameId, "RED");  // round 1
+        skipTurn(gameId, "BLUE"); // round 2
+        skipTurn(gameId, "RED");  // round 3
+
+        de.neebs.franchise.entity.GameState state = franchiseService.getGame(gameId);
+        boolean hasExtensionPair = franchiseService.getPossibleDrawsForState(state).stream()
+                .anyMatch(draw -> draw.getBonusTileUsage() == de.neebs.franchise.entity.BonusTileUsage.EXTENSION
+                        && draw.getExtension() != null
+                        && draw.getExtension().size() == 2);
+
+        org.junit.jupiter.api.Assertions.assertTrue(hasExtensionPair);
+    }
+
+    @Test
     void expand_insufficientFunds_returns400() throws Exception {
         // 5-player game: all regions active, so CASPER (Montana) is available.
         // RED (index 0) gets $3 starting money. CASPER → OKLAHOMA_CITY costs $5.
@@ -889,7 +907,7 @@ class FranchiseControllerTest {
     }
 
     @Test
-    void computerDraw_selfPlayQ_returnsValidDraw() throws Exception {
+    void computerDraw_qLearning_returnsValidDraw() throws Exception {
         String gameId = createGame("RED", "BLUE");
         performInitDraw(gameId, "BLUE", "INDIANAPOLIS");
         performInitDraw(gameId, "RED", "MEMPHIS");
@@ -897,7 +915,7 @@ class FranchiseControllerTest {
         mockMvc.perform(post("/franchise/{gameId}/draws", gameId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"playerType":"COMPUTER","color":"RED","strategy":"SELF_PLAY_Q"}
+                                {"playerType":"COMPUTER","color":"RED","strategy":"Q_LEARNING"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draw.color").value("RED"))
@@ -1080,27 +1098,6 @@ class FranchiseControllerTest {
                 .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
                 .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
                 .andExpect(jsonPath("$.trainingRuns[0].trainingTarget").value("INFLUENCE"))
-                .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
-    }
-
-    @Test
-    void playGame_selfPlayQAlias_mapsToQLearning() throws Exception {
-        String gameId = createGame("RED", "BLUE");
-
-        mockMvc.perform(post("/franchise/{gameId}/learnings", gameId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"timesToPlay":1,
-                                 "learningModels":["SELF_PLAY_Q"],
-                                 "players":[
-                                   {"playerType":"COMPUTER","color":"RED","strategy":"SELF_PLAY_Q"},
-                                   {"playerType":"COMPUTER","color":"BLUE","strategy":"SELF_PLAY_Q"}
-                                 ]}
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.trainingRuns", hasSize(1)))
-                .andExpect(jsonPath("$.trainingRuns[0].strategy").value("Q_LEARNING"))
-                .andExpect(jsonPath("$.trainingRuns[0].trainingTarget").value("TERMINAL_OUTCOME"))
                 .andExpect(jsonPath("$.trainingRuns[0].value").isNumber());
     }
 

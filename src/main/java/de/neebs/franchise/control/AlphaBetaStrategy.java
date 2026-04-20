@@ -32,7 +32,7 @@ public class AlphaBetaStrategy implements GameStrategy {
         Map<String, Object> resolvedParams = MinimaxStrategy.resolveAutoParams(
                 params, state.getPlayers().size(), calibrationService);
         int depth = MinimaxStrategy.parseDepth(resolvedParams);
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
         if (moves.isEmpty()) {
             throw new IllegalStateException("No legal draws available for " + player);
         }
@@ -61,7 +61,7 @@ public class AlphaBetaStrategy implements GameStrategy {
         }
 
         PlayerColor mover = state.getPlayers().get(state.getCurrentPlayerIndex());
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
         if (moves.isEmpty()) {
             return MinimaxStrategy.evaluate(state, params).get(maximizer);
         }

@@ -141,7 +141,7 @@ public class CalibrationService {
             EvalParams params = current == players.get(0) ? firstParams : secondParams;
             Map<String, Object> moveParams = buildParams(params, depth);
 
-            List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
+            List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
             DrawRecord best = selectBestMove(state, current, moves, depth, moveParams);
             state = franchiseService.applyDrawOnState(state, best);
             turns++;
@@ -181,7 +181,7 @@ public class CalibrationService {
             return MinimaxStrategy.evaluate(state, params);
         }
         PlayerColor mover = state.getPlayers().get(state.getCurrentPlayerIndex());
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
         if (moves.isEmpty()) {
             return MinimaxStrategy.evaluate(state, params);
         }

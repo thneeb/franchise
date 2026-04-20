@@ -36,7 +36,7 @@ public class MinimaxStrategy implements GameStrategy {
         Map<String, Object> resolvedParams = resolveAutoParams(params, state.getPlayers().size(),
                 calibrationService);
         int depth = parseDepth(resolvedParams);
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
         if (moves.isEmpty()) {
             throw new IllegalStateException("No legal draws available for " + player);
         }
@@ -60,7 +60,7 @@ public class MinimaxStrategy implements GameStrategy {
             return evaluate(state, params);
         }
         PlayerColor mover = state.getPlayers().get(state.getCurrentPlayerIndex());
-        List<DrawRecord> moves = franchiseService.getPossibleDrawsForAI(state);
+        List<DrawRecord> moves = franchiseService.getPossibleDrawsForState(state);
         if (moves.isEmpty()) {
             return evaluate(state, params);
         }

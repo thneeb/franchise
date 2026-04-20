@@ -362,7 +362,6 @@ components:
       enum:
         - RANDOM
         - MONTE_CARLO_TREE_SEARCH
-        - SELF_PLAY_Q
         - MAXIMAX
         - MINIMAX
         - AB_PRUNE

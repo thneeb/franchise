@@ -448,7 +448,7 @@ public class FranchiseController implements FranchiseApi {
     }
 
     private String canonicalStrategyName(ComputerStrategy strategy) {
-        return strategy == ComputerStrategy.SELF_PLAY_Q ? ComputerStrategy.Q_LEARNING.name() : strategy.name();
+        return strategy.name();
     }
 
     private Map<de.neebs.franchise.entity.PlayerColor, Map<String, Object>> normalizePlayerParams(
