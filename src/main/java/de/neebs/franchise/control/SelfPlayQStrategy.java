@@ -175,8 +175,12 @@ public class SelfPlayQStrategy implements TrainableStrategy {
                                 + DISCOUNT * futureTargets.getOrDefault(mover, 0.0f));
             };
 
-            if (STRATEGY_NAME.equals(playerStrategies.get(mover))
-                    && QLearningTarget.fromParams(playerParams.get(mover)) == trainingTarget) {
+            Map<String, Object> moverParams = playerParams.get(mover);
+            boolean isQLearningMover = STRATEGY_NAME.equals(playerStrategies.get(mover))
+                    && QLearningTarget.fromParams(moverParams) == trainingTarget;
+            boolean isDesignatedLearner = moverParams != null
+                    && Boolean.TRUE.equals(moverParams.get("learn"));
+            if (isQLearningMover || isDesignatedLearner) {
                 freshSamples.add(new ValueTrainingSample(encoder.encode(after, mover), target));
             }
             futureTargets.put(mover, target);
@@ -216,10 +220,19 @@ public class SelfPlayQStrategy implements TrainableStrategy {
                                                Map<PlayerColor, Map<String, Object>> playerParams) {
         Set<QLearningTarget> activeTargets = new LinkedHashSet<>();
         for (Map.Entry<PlayerColor, String> entry : playerStrategies.entrySet()) {
-            if (!STRATEGY_NAME.equals(entry.getValue())) {
-                continue;
+            if (STRATEGY_NAME.equals(entry.getValue())) {
+                activeTargets.add(QLearningTarget.fromParams(playerParams.get(entry.getKey())));
             }
-            activeTargets.add(QLearningTarget.fromParams(playerParams.get(entry.getKey())));
+        }
+        // Behavioral cloning: no Q_LEARNING player in the game, but a designated learner
+        // (learn: true) is present — infer the training target from that player's params.
+        if (activeTargets.isEmpty()) {
+            for (Map.Entry<PlayerColor, Map<String, Object>> entry : playerParams.entrySet()) {
+                if (Boolean.TRUE.equals(entry.getValue().get("learn"))) {
+                    activeTargets.add(QLearningTarget.fromParams(entry.getValue()));
+                    break;
+                }
+            }
         }
         return activeTargets;
     }

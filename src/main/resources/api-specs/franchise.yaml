@@ -58,7 +58,7 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/GameField'
-  /franchise/{gameId}/draws:
+  /franchise/{gameId}/possible-draws:
     parameters:
       -
         name: gameId
@@ -70,13 +70,39 @@ paths:
       operationId: evaluateNextPossibleDraws
       responses:
         '200':
-          description: Returns all next possible draws
+          description: Returns all legal draws for the current player
           content:
             'application/json':
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/HumanDraw'
+  /franchise/{gameId}/draws:
+    parameters:
+      -
+        name: gameId
+        schema:
+          type: string
+        required: true
+        in: path
+    get:
+      operationId: retrieveDrawHistory
+      parameters:
+        -
+          name: withBoards
+          schema:
+            type: boolean
+            default: false
+          in: query
+      responses:
+        '200':
+          description: Returns all played draws, optionally with board state after each draw
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DrawStep'
     post:
       operationId: createDraw
       requestBody:
@@ -369,6 +395,7 @@ components:
         - MACHINE_LEARNING
         - MONTE_CARLO_VALUE
         - Q_LEARNING
+        - STRATEGIC_Q
         - DL4J_NEURAL_NETWORK
     PlayerRegion:
       properties:
@@ -600,6 +627,15 @@ components:
         - DALLAS
         - OKLAHOMA_CITY
         - EL_PASO
+    DrawStep:
+      type: object
+      properties:
+        index:
+          type: integer
+        draw:
+          $ref: '#/components/schemas/HumanDraw'
+        board:
+          $ref: '#/components/schemas/GameField'
     Region:
       enum:
         - CALIFORNIA

@@ -94,6 +94,26 @@ public class FranchiseController implements FranchiseApi {
     }
 
     @Override
+    public ResponseEntity<List<DrawStep>> retrieveDrawHistory(String gameId, Boolean withBoards) {
+        GameState game = franchiseService.getGame(gameId);
+        List<DrawRecord> history = game.getDrawHistory();
+        List<GameState> boards = Boolean.TRUE.equals(withBoards)
+                ? franchiseService.replayGame(gameId, true)
+                : List.of();
+        List<DrawStep> steps = new ArrayList<>();
+        for (int i = 0; i < history.size(); i++) {
+            DrawStep step = new DrawStep()
+                    .index(i)
+                    .draw(toHumanDraw(history.get(i)));
+            if (!boards.isEmpty()) {
+                step.board(toGameField(boards.get(i), Set.of("cities", "players", "regions")));
+            }
+            steps.add(step);
+        }
+        return ResponseEntity.ok(steps);
+    }
+
+    @Override
     public ResponseEntity<LearningResult> playGame(String gameId, PlayConfig playConfig) {
         List<de.neebs.franchise.entity.PlayerColor> players = playConfig.getPlayers().stream()
                 .map(cp -> de.neebs.franchise.entity.PlayerColor.valueOf(cp.getColor().name()))
@@ -191,7 +211,7 @@ public class FranchiseController implements FranchiseApi {
 
         if (includeSection(sections, "cities")) {
             Map<de.neebs.franchise.entity.City, Integer> expansionCosts =
-                    franchiseService.computeExpansionCosts(state.getId());
+                    franchiseService.computeExpansionCosts(state);
             List<CityPlate> cityPlates = Arrays.stream(de.neebs.franchise.entity.City.values())
                     .map(city -> toCityPlate(state, city, expansionCosts.get(city)))
                     .collect(Collectors.toList());
@@ -468,6 +488,10 @@ public class FranchiseController implements FranchiseApi {
             normalized.put("depth", parseInt(params, "depth", 3));
             normalized.put("evalMode", parseString(params, "evalMode", "BALANCED"));
             normalized.put("incomeWeight", parseInt(params, "incomeWeight", 2));
+            if (params != null && params.containsKey("learn")) {
+                normalized.put("learn", params.get("learn"));
+                normalized.put("trainingTarget", parseString(params, "trainingTarget", "TERMINAL_OUTCOME"));
+            }
             return normalized;
         }
         if ("MONTE_CARLO_TREE_SEARCH".equals(strategy)) {
