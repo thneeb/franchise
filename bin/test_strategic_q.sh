@@ -1,13 +1,15 @@
 #!/bin/bash
-# Quick benchmark: Q_LEARNING (greedy, no training) vs STRATEGIC_Q.
-# Use this to check whether rule changes to STRATEGIC_Q made it stronger or weaker.
-# Usage: ./test_strategic_q.sh [games]
-#   games: number of games to play (default: 200)
+# Quick benchmark: Q_LEARNING (no training) vs STRATEGIC_Q.
+# Use this to check model strength after training rounds.
+# Usage: ./test_strategic_q.sh [games] [epsilon]
+#   games:   number of games to play  (default: 200)
+#   epsilon: exploration rate         (default: 0.2)
 
 BASE_URL="http://localhost:8080"
 GAMES=${1:-200}
+EPSILON=${2:-0.2}
 
-echo "Benchmark: Q_LEARNING (ε=0.3) vs STRATEGIC_Q — $GAMES games"
+echo "Benchmark: Q_LEARNING (ε=$EPSILON) vs STRATEGIC_Q — $GAMES games"
 
 GAME_ID=$(curl -s -X POST "$BASE_URL/franchise" \
   -H "Content-Type: application/json" \
@@ -25,7 +27,7 @@ RESULT=$(curl -s -X POST "$BASE_URL/franchise/$GAME_ID/learnings" \
     \"timesToPlay\": $GAMES,
     \"players\": [
       {\"playerType\": \"COMPUTER\", \"color\": \"BLUE\", \"strategy\": \"Q_LEARNING\",
-       \"params\": {\"epsilon\": 0.3, \"trainingTarget\": \"TERMINAL_OUTCOME\"}},
+       \"params\": {\"epsilon\": $EPSILON, \"trainingTarget\": \"TERMINAL_OUTCOME\"}},
       {\"playerType\": \"COMPUTER\", \"color\": \"RED\", \"strategy\": \"STRATEGIC_Q\",
        \"params\": {\"trainingTarget\": \"TERMINAL_OUTCOME\"}}
     ],

@@ -1,14 +1,16 @@
 #!/bin/bash
 # Trains Q_LEARNING against STRATEGIC_Q in configurable batches.
-# Usage: ./train_q_learning.sh [batches] [games_per_batch]
+# Usage: ./train_q_learning.sh [batches] [games_per_batch] [epsilon]
 #   batches:         number of training rounds  (default: 10)
 #   games_per_batch: games per round            (default: 500)
+#   epsilon:         exploration rate 0.0–1.0   (default: 0.2)
 
 BASE_URL="http://localhost:8080"
 BATCHES=${1:-10}
 GAMES=${2:-500}
+EPSILON=${3:-0.2}
 
-echo "Training Q_LEARNING vs STRATEGIC_Q: $BATCHES batches x $GAMES games"
+echo "Training Q_LEARNING vs STRATEGIC_Q: $BATCHES batches x $GAMES games (ε=$EPSILON)"
 
 GAME_ID=$(curl -s -X POST "$BASE_URL/franchise" \
   -H "Content-Type: application/json" \
@@ -31,7 +33,7 @@ PLAY_CONFIG=$(cat <<EOF
       "playerType": "COMPUTER",
       "color": "BLUE",
       "strategy": "Q_LEARNING",
-      "params": { "epsilon": 0.3, "trainingTarget": "TERMINAL_OUTCOME" }
+      "params": { "epsilon": $EPSILON, "trainingTarget": "TERMINAL_OUTCOME" }
     },
     {
       "playerType": "COMPUTER",
