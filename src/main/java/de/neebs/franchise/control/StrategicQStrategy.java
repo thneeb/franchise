@@ -36,7 +36,8 @@ public class StrategicQStrategy implements GameStrategy {
             new AvoidIncreaseInSafeCityRule(),
             new PreferRegionLeadExtensionRule(),
             new ContestOpponentRegionRule(),
-            new AvoidExpensiveExtensionRule()
+            new AvoidExpensiveExtensionRule(),
+            new AvoidGivingOpponentRegionClosureRule()
     );
 
     public StrategicQStrategy(@Lazy FranchiseService franchiseService,
@@ -282,6 +283,55 @@ public class StrategicQStrategy implements GameStrategy {
                     .mapToInt(Connection::cost)
                     .min()
                     .orElse(Integer.MAX_VALUE);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Rule: avoid moves that leave exactly one open slot in a region, which
+    //       lets the opponent close it next turn and claim the track bonus.
+    //       Moves that close the region themselves (0 slots remaining) are fine.
+    // -------------------------------------------------------------------------
+
+    private static final class AvoidGivingOpponentRegionClosureRule implements StrategyRule {
+        @Override
+        public List<DrawRecord> filter(List<DrawRecord> moves, GameState state, PlayerColor player) {
+            List<DrawRecord> safe = moves.stream()
+                    .filter(move -> !isDangerous(move, state))
+                    .collect(Collectors.toList());
+            return safe.isEmpty() ? moves : safe;
+        }
+
+        private boolean isDangerous(DrawRecord move, GameState state) {
+            for (Region region : Region.values()) {
+                if (state.getClosedRegions().contains(region)) continue;
+                int openSlots = openSlots(region, state);
+                int placed = branchesPlacedInRegion(move, region);
+                if (placed > 0 && openSlots - placed == 1) return true;
+            }
+            return false;
+        }
+
+        private int openSlots(Region region, GameState state) {
+            int count = 0;
+            for (City city : region.getCities()) {
+                PlayerColor[] slots = state.getCityBranches().get(city);
+                if (slots == null) continue;
+                for (PlayerColor slot : slots) {
+                    if (slot == null) count++;
+                }
+            }
+            return count;
+        }
+
+        private int branchesPlacedInRegion(DrawRecord move, Region region) {
+            int count = 0;
+            for (City city : move.getExtension()) {
+                if (region.getCities().contains(city)) count++;
+            }
+            for (City city : move.getIncrease()) {
+                if (region.getCities().contains(city)) count++;
+            }
+            return count;
         }
     }
 
