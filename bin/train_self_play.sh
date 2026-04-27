@@ -1,7 +1,8 @@
 #!/bin/bash
-# Self-play training: Q_LEARNING (exploring) vs Q_LEARNING (greedy).
-# Both players share the same model. BLUE explores (epsilon > 0) and learns;
-# RED plays greedily (epsilon=0) as a stable challenging opponent.
+# Self-play training: Q_LEARNING (learner, exploring) vs Q_LEARNING_FROZEN (stable opponent).
+# RED learns with epsilon > 0; BLUE plays greedily from a frozen snapshot that advances
+# every 100 games — prevents the degradation cycle caused by two live networks updating
+# simultaneously.
 # Usage: ./train_self_play.sh [batches] [games_per_batch]
 #   batches:         number of training rounds  (default: 20)
 #   games_per_batch: games per round            (default: 500)
@@ -10,7 +11,7 @@ BASE_URL="http://localhost:8080"
 BATCHES=${1:-20}
 GAMES=${2:-500}
 
-echo "Self-play training: Q_LEARNING (ε=0.1) vs Q_LEARNING (ε=0.1): $BATCHES batches x $GAMES games"
+echo "Self-play training: RED=Q_LEARNING (ε=0.1) vs BLUE=Q_LEARNING_FROZEN: $BATCHES batches x $GAMES games"
 
 GAME_ID=$(curl -s -X POST "$BASE_URL/franchise" \
   -H "Content-Type: application/json" \
@@ -31,15 +32,15 @@ PLAY_CONFIG=$(cat <<EOF
   "players": [
     {
       "playerType": "COMPUTER",
-      "color": "BLUE",
+      "color": "RED",
       "strategy": "Q_LEARNING",
       "params": { "epsilon": 0.1, "trainingTarget": "TERMINAL_OUTCOME" }
     },
     {
       "playerType": "COMPUTER",
-      "color": "RED",
-      "strategy": "Q_LEARNING",
-      "params": { "epsilon": 0.1, "trainingTarget": "TERMINAL_OUTCOME" }
+      "color": "BLUE",
+      "strategy": "Q_LEARNING_FROZEN",
+      "params": { "trainingTarget": "TERMINAL_OUTCOME" }
     }
   ],
   "learningModels": ["Q_LEARNING"]

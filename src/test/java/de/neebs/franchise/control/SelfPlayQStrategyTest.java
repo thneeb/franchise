@@ -39,7 +39,7 @@ class SelfPlayQStrategyTest {
         extensionMove.setIncrease(List.of());
         extensionMove.setBonusTileUsage(BonusTileUsage.EXTENSION);
 
-        when(franchiseService.getPossibleDrawsForState(state)).thenReturn(List.of(extensionMove));
+        when(franchiseService.getPossibleStrategyDrawsForState(state)).thenReturn(List.of(extensionMove));
         when(franchiseService.applyDrawOnState(state, extensionMove)).thenReturn(state);
         when(modelService.getOrCreate(2, QLearningTarget.TERMINAL_OUTCOME)).thenReturn(network);
         when(network.predictClamped(any())).thenReturn(1.0f);
@@ -47,7 +47,7 @@ class SelfPlayQStrategyTest {
         DrawRecord selected = strategy.selectDraw(state, PlayerColor.RED, Map.of());
 
         assertSame(extensionMove, selected);
-        verify(franchiseService).getPossibleDrawsForState(state);
+        verify(franchiseService).getPossibleStrategyDrawsForState(state);
         verify(modelService).getOrCreate(2, QLearningTarget.TERMINAL_OUTCOME);
         verify(franchiseService).applyDrawOnState(state, extensionMove);
         verify(network).predictClamped(any());

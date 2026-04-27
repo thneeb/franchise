@@ -330,6 +330,9 @@ public class FranchiseService {
             throw new IllegalArgumentException("Strategy not implemented: " + strategyName);
         }
         GameState state = getGame(gameId);
+        if (state.isEnd()) {
+            throw new IllegalArgumentException("Game is already over");
+        }
         PlayerColor player = currentPlayer(state);
         if (requestedPlayer != null && requestedPlayer != player) {
             throw new IllegalArgumentException("Not your turn");

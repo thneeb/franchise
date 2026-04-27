@@ -395,6 +395,7 @@ components:
         - MACHINE_LEARNING
         - MONTE_CARLO_VALUE
         - Q_LEARNING
+        - Q_LEARNING_FROZEN
         - STRATEGIC_Q
         - DL4J_NEURAL_NETWORK
     PlayerRegion:

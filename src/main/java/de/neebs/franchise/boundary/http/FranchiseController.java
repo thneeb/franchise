@@ -509,6 +509,10 @@ public class FranchiseController implements FranchiseApi {
             normalized.put("trainingTarget", parseString(params, "trainingTarget", "TERMINAL_OUTCOME"));
             return normalized;
         }
+        if ("Q_LEARNING_FROZEN".equals(strategy)) {
+            normalized.put("trainingTarget", parseString(params, "trainingTarget", "TERMINAL_OUTCOME"));
+            return normalized;
+        }
         return params != null ? new LinkedHashMap<>(params) : Map.of();
     }
 

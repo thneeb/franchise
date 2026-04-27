@@ -28,6 +28,7 @@ public class SelfPlayQStrategy implements TrainableStrategy {
     private static final int DEFAULT_UPDATES_PER_GAME = 8;
     private static final int DEFAULT_REPLAY_CAPACITY = 20_000;
     private static final float DISCOUNT = 0.99f;
+    static final int FROZEN_SYNC_INTERVAL = 100;
 
     private final FranchiseService franchiseService;
     private final SelfPlayQModelService modelService;
@@ -107,6 +108,9 @@ public class SelfPlayQStrategy implements TrainableStrategy {
             network.setTrainingRuns(network.getTrainingRuns() + 1);
             long saveStart = System.nanoTime();
             modelService.save(network, numPlayers, trainingTarget);
+            if (network.getTrainingRuns() % FROZEN_SYNC_INTERVAL == 0) {
+                modelService.syncFrozenModel(numPlayers, trainingTarget);
+            }
             modelSaveNanos += System.nanoTime() - saveStart;
             trained = true;
         }
