@@ -288,23 +288,26 @@ public class StrategicQStrategy implements GameStrategy {
     }
 
     // -------------------------------------------------------------------------
-    // Rule: in the late game (few open slots remain), prefer increases in
-    //       regions where the player strictly leads in branch count. This
-    //       prevents the opponent from racing to close regions we already
-    //       control before we have a chance to fill our own slots.
+    // Rule: in the late game, prefer increases in regions where the player
+    //       strictly leads — including already-closed regions — to maximise
+    //       income and influence before the game ends.
+    //       Trigger: ≥6 of the 10 regions are closed (reliable endgame signal).
+    //       Regions close when every city in them has been entered, NOT when
+    //       all city slots are filled, so counting open city slots is the wrong
+    //       metric. Counting closed regions is the correct one.
     //       Positioned before extension-preference rules so increase moves
     //       are still available when the late-game filter fires.
     // -------------------------------------------------------------------------
 
     private static final class SecureWinningRegionsLateRule implements StrategyRule {
-        private static final int LATE_GAME_SLOTS = 12;
+        private static final int LATE_GAME_CLOSED_REGIONS = 6;
 
         @Override
         public List<DrawRecord> filter(List<DrawRecord> moves, GameState state, PlayerColor player) {
-            if (openSlotsInUnclosedRegions(state) > LATE_GAME_SLOTS) return moves;
+            if (state.getClosedRegions().size() < LATE_GAME_CLOSED_REGIONS) return moves;
 
+            // Include closed regions: increasing there still generates income → influence.
             Set<Region> winning = Arrays.stream(Region.values())
-                    .filter(r -> !state.getClosedRegions().contains(r))
                     .filter(r -> playerStrictlyLeads(r, state, player))
                     .collect(Collectors.toCollection(() -> EnumSet.noneOf(Region.class)));
 
@@ -324,21 +327,6 @@ public class StrategicQStrategy implements GameStrategy {
             return counts.entrySet().stream()
                     .filter(e -> e.getKey() != player)
                     .allMatch(e -> e.getValue() < myCount);
-        }
-
-        private static int openSlotsInUnclosedRegions(GameState state) {
-            int total = 0;
-            for (Region r : Region.values()) {
-                if (state.getClosedRegions().contains(r)) continue;
-                for (City city : r.getCities()) {
-                    PlayerColor[] slots = state.getCityBranches().get(city);
-                    if (slots == null) continue;
-                    for (PlayerColor slot : slots) {
-                        if (slot == null) total++;
-                    }
-                }
-            }
-            return total;
         }
     }
 
