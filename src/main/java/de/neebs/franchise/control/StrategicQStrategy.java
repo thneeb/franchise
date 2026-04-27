@@ -35,7 +35,8 @@ public class StrategicQStrategy implements GameStrategy {
             new UseExtensionBonusTileEarlyRule(),
             new AvoidIncreaseInSafeCityRule(),
             new PreferRegionLeadExtensionRule(),
-            new ContestOpponentRegionRule()
+            new ContestOpponentRegionRule(),
+            new AvoidExpensiveExtensionRule()
     );
 
     public StrategicQStrategy(@Lazy FranchiseService franchiseService,
@@ -54,7 +55,7 @@ public class StrategicQStrategy implements GameStrategy {
         List<DrawRecord> candidates = applyRules(moves, state, player);
 
         QLearningTarget target = QLearningTarget.fromParams(params);
-        NeuralNetwork network = modelService.getOrCreate(state.getPlayers().size(), target);
+        NeuralNetwork network = modelService.getOrCreateFrozen(state.getPlayers().size(), target);
 
         DrawRecord best = null;
         float bestScore = Float.NEGATIVE_INFINITY;
@@ -242,6 +243,45 @@ public class StrategicQStrategy implements GameStrategy {
             return counts.entrySet().stream()
                     .filter(e -> e.getKey() != player)
                     .anyMatch(e -> e.getValue() - myCount >= minLead);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Rule: avoid extending via connections with cost >= HIGH_COST when cheaper
+    //       alternatives exist. High-cost routes burn money that could fund two
+    //       cheaper expansions instead.
+    // -------------------------------------------------------------------------
+
+    private static final class AvoidExpensiveExtensionRule implements StrategyRule {
+        private static final int HIGH_COST = 8;
+
+        @Override
+        public List<DrawRecord> filter(List<DrawRecord> moves, GameState state, PlayerColor player) {
+            Set<City> myCities = playerCities(state, player);
+            List<DrawRecord> affordable = moves.stream()
+                    .filter(m -> m.getExtension().stream()
+                            .allMatch(city -> extensionCost(city, myCities) < HIGH_COST))
+                    .collect(Collectors.toList());
+            return affordable.isEmpty() ? moves : affordable;
+        }
+
+        private static Set<City> playerCities(GameState state, PlayerColor player) {
+            Set<City> cities = EnumSet.noneOf(City.class);
+            state.getCityBranches().forEach((city, slots) -> {
+                for (PlayerColor slot : slots) {
+                    if (slot == player) { cities.add(city); break; }
+                }
+            });
+            return cities;
+        }
+
+        private static int extensionCost(City target, Set<City> myCities) {
+            return Rules.CONNECTIONS.stream()
+                    .filter(c -> c.cities().contains(target))
+                    .filter(c -> c.cities().stream().anyMatch(city -> city != target && myCities.contains(city)))
+                    .mapToInt(Connection::cost)
+                    .min()
+                    .orElse(Integer.MAX_VALUE);
         }
     }
 

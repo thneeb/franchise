@@ -102,19 +102,14 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         return withExtBonus.isEmpty() ? moves : withExtBonus;
     }
 
-    // Prefer extension moves over pure-increase moves, and prefer pure extensions over
-    // extension+increase combos. Combining both in one move splits resources between
-    // reaching a new city and reinforcing an old one — better to extend cleanly and
-    // let the next move decide whether to increase.
+    // Prefer extension moves over pure-increase moves: spreading to new cities builds income
+    // and region coverage that the network undervalues from sparse terminal-outcome signals.
+    // Extension+increase combos are kept — combining both in one move is a valid strategy.
     private static List<DrawRecord> filterPreferExtension(List<DrawRecord> moves) {
         List<DrawRecord> withExtension = moves.stream()
                 .filter(m -> !m.getExtension().isEmpty())
                 .collect(Collectors.toList());
-        if (withExtension.isEmpty()) return moves;
-        List<DrawRecord> extensionOnly = withExtension.stream()
-                .filter(m -> m.getIncrease().isEmpty())
-                .collect(Collectors.toList());
-        return extensionOnly.isEmpty() ? withExtension : extensionOnly;
+        return withExtension.isEmpty() ? moves : withExtension;
     }
 
     @Override
