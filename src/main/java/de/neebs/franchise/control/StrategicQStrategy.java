@@ -34,6 +34,7 @@ public class StrategicQStrategy implements GameStrategy {
             new AvoidSkipWhenMovesAvailableRule(),
             new UseExtensionBonusTileEarlyRule(),
             new AvoidIncreaseInSafeCityRule(),
+            new SecureWinningRegionsLateRule(),
             new PreferRegionLeadExtensionRule(),
             new ContestOpponentRegionRule(),
             new AvoidExpensiveExtensionRule(),
@@ -283,6 +284,61 @@ public class StrategicQStrategy implements GameStrategy {
                     .mapToInt(Connection::cost)
                     .min()
                     .orElse(Integer.MAX_VALUE);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Rule: in the late game (few open slots remain), prefer increases in
+    //       regions where the player strictly leads in branch count. This
+    //       prevents the opponent from racing to close regions we already
+    //       control before we have a chance to fill our own slots.
+    //       Positioned before extension-preference rules so increase moves
+    //       are still available when the late-game filter fires.
+    // -------------------------------------------------------------------------
+
+    private static final class SecureWinningRegionsLateRule implements StrategyRule {
+        private static final int LATE_GAME_SLOTS = 12;
+
+        @Override
+        public List<DrawRecord> filter(List<DrawRecord> moves, GameState state, PlayerColor player) {
+            if (openSlotsInUnclosedRegions(state) > LATE_GAME_SLOTS) return moves;
+
+            Set<Region> winning = Arrays.stream(Region.values())
+                    .filter(r -> !state.getClosedRegions().contains(r))
+                    .filter(r -> playerStrictlyLeads(r, state, player))
+                    .collect(Collectors.toCollection(() -> EnumSet.noneOf(Region.class)));
+
+            if (winning.isEmpty()) return moves;
+
+            List<DrawRecord> preferred = moves.stream()
+                    .filter(m -> m.getIncrease().stream()
+                            .anyMatch(city -> winning.stream().anyMatch(r -> r.getCities().contains(city))))
+                    .collect(Collectors.toList());
+            return preferred.isEmpty() ? moves : preferred;
+        }
+
+        private boolean playerStrictlyLeads(Region region, GameState state, PlayerColor player) {
+            Map<PlayerColor, Integer> counts = branchCounts(region, state);
+            int myCount = counts.getOrDefault(player, 0);
+            if (myCount == 0) return false;
+            return counts.entrySet().stream()
+                    .filter(e -> e.getKey() != player)
+                    .allMatch(e -> e.getValue() < myCount);
+        }
+
+        private static int openSlotsInUnclosedRegions(GameState state) {
+            int total = 0;
+            for (Region r : Region.values()) {
+                if (state.getClosedRegions().contains(r)) continue;
+                for (City city : r.getCities()) {
+                    PlayerColor[] slots = state.getCityBranches().get(city);
+                    if (slots == null) continue;
+                    for (PlayerColor slot : slots) {
+                        if (slot == null) total++;
+                    }
+                }
+            }
+            return total;
         }
     }
 
