@@ -6,9 +6,11 @@ import de.neebs.franchise.entity.Connection;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.PlayerColor;
+import de.neebs.franchise.entity.Region;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -30,7 +32,9 @@ public class StrategicQStrategy implements GameStrategy {
     private final StateEncoder encoder = new StateEncoder();
     private final List<StrategyRule> rules = List.of(
             new UseExtensionBonusTileEarlyRule(),
-            new AvoidIncreaseInSafeCityRule()
+            new AvoidIncreaseInSafeCityRule(),
+            new PreferRegionLeadExtensionRule(),
+            new ContestOpponentRegionRule()
     );
 
     public StrategicQStrategy(@Lazy FranchiseService franchiseService,
@@ -144,6 +148,85 @@ public class StrategicQStrategy implements GameStrategy {
                 }
             }
             return true;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Shared helper: count branches per player in a region
+    // -------------------------------------------------------------------------
+
+    private static Map<PlayerColor, Integer> branchCounts(Region region, GameState state) {
+        Map<PlayerColor, Integer> counts = new EnumMap<>(PlayerColor.class);
+        for (City city : region.getCities()) {
+            PlayerColor[] slots = state.getCityBranches().get(city);
+            if (slots == null) continue;
+            for (PlayerColor slot : slots) {
+                if (slot != null) counts.merge(slot, 1, Integer::sum);
+            }
+        }
+        return counts;
+    }
+
+    // -------------------------------------------------------------------------
+    // Rule: prefer extensions into open regions where the player leads (or ties)
+    // -------------------------------------------------------------------------
+
+    private static final class PreferRegionLeadExtensionRule implements StrategyRule {
+        @Override
+        public List<DrawRecord> filter(List<DrawRecord> moves, GameState state, PlayerColor player) {
+            Set<Region> ledRegions = Arrays.stream(Region.values())
+                    .filter(r -> !state.getClosedRegions().contains(r))
+                    .filter(r -> playerLeadsOrTies(r, state, player))
+                    .collect(Collectors.toCollection(() -> EnumSet.noneOf(Region.class)));
+
+            if (ledRegions.isEmpty()) return moves;
+
+            List<DrawRecord> preferred = moves.stream()
+                    .filter(m -> m.getExtension().stream()
+                            .anyMatch(city -> ledRegions.stream().anyMatch(r -> r.getCities().contains(city))))
+                    .collect(Collectors.toList());
+            return preferred.isEmpty() ? moves : preferred;
+        }
+
+        private boolean playerLeadsOrTies(Region region, GameState state, PlayerColor player) {
+            Map<PlayerColor, Integer> counts = branchCounts(region, state);
+            int myCount = counts.getOrDefault(player, 0);
+            if (myCount == 0) return false;
+            return counts.entrySet().stream()
+                    .filter(e -> e.getKey() != player)
+                    .allMatch(e -> e.getValue() <= myCount);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Rule: contest regions where an opponent leads by MIN_OPPONENT_LEAD or more
+    // -------------------------------------------------------------------------
+
+    private static final class ContestOpponentRegionRule implements StrategyRule {
+        private static final int MIN_OPPONENT_LEAD = 2;
+
+        @Override
+        public List<DrawRecord> filter(List<DrawRecord> moves, GameState state, PlayerColor player) {
+            Set<Region> contested = Arrays.stream(Region.values())
+                    .filter(r -> !state.getClosedRegions().contains(r))
+                    .filter(r -> opponentLeadsBy(r, state, player, MIN_OPPONENT_LEAD))
+                    .collect(Collectors.toCollection(() -> EnumSet.noneOf(Region.class)));
+
+            if (contested.isEmpty()) return moves;
+
+            List<DrawRecord> contesting = moves.stream()
+                    .filter(m -> m.getExtension().stream()
+                            .anyMatch(city -> contested.stream().anyMatch(r -> r.getCities().contains(city))))
+                    .collect(Collectors.toList());
+            return contesting.isEmpty() ? moves : contesting;
+        }
+
+        private boolean opponentLeadsBy(Region region, GameState state, PlayerColor player, int minLead) {
+            Map<PlayerColor, Integer> counts = branchCounts(region, state);
+            int myCount = counts.getOrDefault(player, 0);
+            return counts.entrySet().stream()
+                    .filter(e -> e.getKey() != player)
+                    .anyMatch(e -> e.getValue() - myCount >= minLead);
         }
     }
 
