@@ -1,8 +1,10 @@
 package de.neebs.franchise.control;
 
+import de.neebs.franchise.entity.BonusTileUsage;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.GameState;
 import de.neebs.franchise.entity.PlayerColor;
+import de.neebs.franchise.entity.Score;
 import de.neebs.franchise.entity.TrainingRunCount;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -55,6 +57,8 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         }
 
         List<DrawRecord> candidates = filterSkip(moves);
+        candidates = filterBonusTileExtension(candidates, state, player);
+        candidates = filterPreferExtension(candidates);
 
         float epsilon = parseFloat(params, "epsilon", 0.0f);
         if (epsilon > 0.0f && random.nextFloat() < epsilon) {
@@ -82,6 +86,29 @@ public class SelfPlayQStrategy implements TrainableStrategy {
                 .filter(m -> !m.getExtension().isEmpty() || !m.getIncrease().isEmpty())
                 .collect(Collectors.toList());
         return actionable.isEmpty() ? moves : actionable;
+    }
+
+    // In early rounds, if the player still has bonus tiles, only consider EXTENSION bonus-tile moves.
+    // The network cannot learn this habit reliably from terminal-outcome signal alone.
+    private static final int BONUS_TILE_ROUNDS = 5;
+
+    private static List<DrawRecord> filterBonusTileExtension(List<DrawRecord> moves, GameState state, PlayerColor player) {
+        if (state.isInitialization() || state.getRound() > BONUS_TILE_ROUNDS) return moves;
+        Score score = state.getScores().get(player);
+        if (score == null || score.getBonusTiles() <= 0) return moves;
+        List<DrawRecord> withExtBonus = moves.stream()
+                .filter(m -> m.getBonusTileUsage() == BonusTileUsage.EXTENSION)
+                .collect(Collectors.toList());
+        return withExtBonus.isEmpty() ? moves : withExtBonus;
+    }
+
+    // Prefer extension moves over pure-increase moves: spreading to new cities builds income
+    // and region coverage, which the network undervalues from sparse terminal-outcome signals.
+    private static List<DrawRecord> filterPreferExtension(List<DrawRecord> moves) {
+        List<DrawRecord> withExtension = moves.stream()
+                .filter(m -> !m.getExtension().isEmpty())
+                .collect(Collectors.toList());
+        return withExtension.isEmpty() ? moves : withExtension;
     }
 
     @Override
