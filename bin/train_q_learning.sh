@@ -1,16 +1,22 @@
 #!/bin/bash
 # Trains Q_LEARNING against STRATEGIC_Q in configurable batches.
-# Usage: ./train_q_learning.sh [batches] [games_per_batch] [epsilon]
-#   batches:         number of training rounds  (default: 10)
+# Epsilon decays each batch from START_EPSILON down to MIN_EPSILON.
+# Q_LEARNING alternates sides (BLUE/RED) each batch so the network
+# learns from both starting positions.
+# Usage: ./train_q_learning.sh [batches] [games_per_batch] [start_epsilon]
+#   batches:         number of training rounds  (default: 20)
 #   games_per_batch: games per round            (default: 500)
-#   epsilon:         exploration rate 0.0–1.0   (default: 0.2)
+#   start_epsilon:   initial exploration rate   (default: 0.2)
 
 BASE_URL="http://localhost:8080"
-BATCHES=${1:-10}
+BATCHES=${1:-20}
 GAMES=${2:-500}
-EPSILON=${3:-0.2}
+START_EPSILON=${3:-0.2}
+MIN_EPSILON=0.02
+EPSILON_DECAY=0.01
 
-echo "Training Q_LEARNING vs STRATEGIC_Q: $BATCHES batches x $GAMES games (ε=$EPSILON)"
+echo "Training Q_LEARNING vs STRATEGIC_Q: $BATCHES batches x $GAMES games"
+echo "  ε: $START_EPSILON → $MIN_EPSILON (decay $EPSILON_DECAY/batch), alternating sides"
 
 GAME_ID=$(curl -s -X POST "$BASE_URL/franchise" \
   -H "Content-Type: application/json" \
@@ -24,28 +30,6 @@ fi
 
 echo "Game ID: $GAME_ID"
 echo ""
-
-PLAY_CONFIG=$(cat <<EOF
-{
-  "timesToPlay": $GAMES,
-  "players": [
-    {
-      "playerType": "COMPUTER",
-      "color": "BLUE",
-      "strategy": "Q_LEARNING",
-      "params": { "epsilon": $EPSILON, "trainingTarget": "TERMINAL_OUTCOME" }
-    },
-    {
-      "playerType": "COMPUTER",
-      "color": "RED",
-      "strategy": "STRATEGIC_Q",
-      "params": { "trainingTarget": "TERMINAL_OUTCOME" }
-    }
-  ],
-  "learningModels": ["Q_LEARNING"]
-}
-EOF
-)
 
 poll_progress() {
   while kill -0 "$1" 2>/dev/null; do
@@ -66,7 +50,40 @@ print(f'  [{pct:3d}%] Game {c}/{t} | {wins}', end='')
 }
 
 for i in $(seq 1 $BATCHES); do
-  echo "--- Batch $i / $BATCHES ---"
+  # Decay epsilon, clamp to MIN_EPSILON
+  EPSILON=$(python3 -c "e=round($START_EPSILON - ($i-1)*$EPSILON_DECAY, 4); print(max($MIN_EPSILON, e))")
+
+  # Alternate sides: odd batches Q_LEARNING=BLUE, even batches Q_LEARNING=RED
+  if [ $((i % 2)) -eq 1 ]; then
+    Q_COLOR="BLUE"; S_COLOR="RED"
+  else
+    Q_COLOR="RED";  S_COLOR="BLUE"
+  fi
+
+  echo "--- Batch $i / $BATCHES | ε=$EPSILON | Q_LEARNING=$Q_COLOR ---"
+
+  PLAY_CONFIG=$(cat <<EOF
+{
+  "timesToPlay": $GAMES,
+  "players": [
+    {
+      "playerType": "COMPUTER",
+      "color": "$Q_COLOR",
+      "strategy": "Q_LEARNING",
+      "params": { "epsilon": $EPSILON, "trainingTarget": "TERMINAL_OUTCOME" }
+    },
+    {
+      "playerType": "COMPUTER",
+      "color": "$S_COLOR",
+      "strategy": "STRATEGIC_Q",
+      "params": { "trainingTarget": "TERMINAL_OUTCOME" }
+    }
+  ],
+  "learningModels": ["Q_LEARNING"]
+}
+EOF
+)
+
   RESULT_FILE=$(mktemp)
   curl -s -X POST "$BASE_URL/franchise/$GAME_ID/learnings" \
     -H "Content-Type: application/json" \

@@ -90,7 +90,7 @@ public class SelfPlayQStrategy implements TrainableStrategy {
 
     // In early rounds, if the player still has bonus tiles, only consider EXTENSION bonus-tile moves.
     // The network cannot learn this habit reliably from terminal-outcome signal alone.
-    private static final int BONUS_TILE_ROUNDS = 5;
+    private static final int BONUS_TILE_ROUNDS = 7;
 
     private static List<DrawRecord> filterBonusTileExtension(List<DrawRecord> moves, GameState state, PlayerColor player) {
         if (state.isInitialization() || state.getRound() > BONUS_TILE_ROUNDS) return moves;
@@ -102,13 +102,19 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         return withExtBonus.isEmpty() ? moves : withExtBonus;
     }
 
-    // Prefer extension moves over pure-increase moves: spreading to new cities builds income
-    // and region coverage, which the network undervalues from sparse terminal-outcome signals.
+    // Prefer extension moves over pure-increase moves, and prefer pure extensions over
+    // extension+increase combos. Combining both in one move splits resources between
+    // reaching a new city and reinforcing an old one — better to extend cleanly and
+    // let the next move decide whether to increase.
     private static List<DrawRecord> filterPreferExtension(List<DrawRecord> moves) {
         List<DrawRecord> withExtension = moves.stream()
                 .filter(m -> !m.getExtension().isEmpty())
                 .collect(Collectors.toList());
-        return withExtension.isEmpty() ? moves : withExtension;
+        if (withExtension.isEmpty()) return moves;
+        List<DrawRecord> extensionOnly = withExtension.stream()
+                .filter(m -> m.getIncrease().isEmpty())
+                .collect(Collectors.toList());
+        return extensionOnly.isEmpty() ? withExtension : extensionOnly;
     }
 
     @Override
