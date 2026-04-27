@@ -54,16 +54,18 @@ public class SelfPlayQStrategy implements TrainableStrategy {
             throw new IllegalStateException("No legal draws available for " + player);
         }
 
+        List<DrawRecord> candidates = filterSkip(moves);
+
         float epsilon = parseFloat(params, "epsilon", 0.0f);
         if (epsilon > 0.0f && random.nextFloat() < epsilon) {
-            return moves.get(random.nextInt(moves.size()));
+            return candidates.get(random.nextInt(candidates.size()));
         }
 
         QLearningTarget trainingTarget = QLearningTarget.fromParams(params);
         NeuralNetwork network = modelService.getOrCreate(state.getPlayers().size(), trainingTarget);
         DrawRecord best = null;
         float bestScore = Float.NEGATIVE_INFINITY;
-        for (DrawRecord move : moves) {
+        for (DrawRecord move : candidates) {
             GameState next = franchiseService.applyDrawOnState(state, move);
             float score = network.predictClamped(encoder.encode(next, player));
             if (score > bestScore) {
@@ -72,6 +74,14 @@ public class SelfPlayQStrategy implements TrainableStrategy {
             }
         }
         return best;
+    }
+
+    // Skip (empty extension + empty increase) is only allowed when no actionable move exists.
+    private static List<DrawRecord> filterSkip(List<DrawRecord> moves) {
+        List<DrawRecord> actionable = moves.stream()
+                .filter(m -> !m.getExtension().isEmpty() || !m.getIncrease().isEmpty())
+                .collect(Collectors.toList());
+        return actionable.isEmpty() ? moves : actionable;
     }
 
     @Override

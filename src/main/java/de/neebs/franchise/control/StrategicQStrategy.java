@@ -31,6 +31,7 @@ public class StrategicQStrategy implements GameStrategy {
     private final SelfPlayQModelService modelService;
     private final StateEncoder encoder = new StateEncoder();
     private final List<StrategyRule> rules = List.of(
+            new AvoidSkipWhenMovesAvailableRule(),
             new UseExtensionBonusTileEarlyRule(),
             new AvoidIncreaseInSafeCityRule(),
             new PreferRegionLeadExtensionRule(),
@@ -74,6 +75,20 @@ public class StrategicQStrategy implements GameStrategy {
             candidates = rule.filter(candidates, state, player);
         }
         return candidates;
+    }
+
+    // -------------------------------------------------------------------------
+    // Rule: never skip when any actionable move (extension or increase) exists
+    // -------------------------------------------------------------------------
+
+    private static final class AvoidSkipWhenMovesAvailableRule implements StrategyRule {
+        @Override
+        public List<DrawRecord> filter(List<DrawRecord> moves, GameState state, PlayerColor player) {
+            List<DrawRecord> actionable = moves.stream()
+                    .filter(m -> !m.getExtension().isEmpty() || !m.getIncrease().isEmpty())
+                    .collect(Collectors.toList());
+            return actionable.isEmpty() ? moves : actionable;
+        }
     }
 
     // -------------------------------------------------------------------------
