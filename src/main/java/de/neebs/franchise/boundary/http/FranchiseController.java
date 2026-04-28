@@ -523,6 +523,13 @@ public class FranchiseController implements FranchiseApi {
             if (startCity != null) normalized.put("startCity", startCity);
             return normalized;
         }
+        if ("LLM".equals(strategy)) {
+            String model = parseString(params, "model", null);
+            if (model != null) normalized.put("model", model);
+            String logReason = parseString(params, "logReason", null);
+            if (logReason != null) normalized.put("logReason", logReason);
+            return normalized;
+        }
         return params != null ? new LinkedHashMap<>(params) : Map.of();
     }
 
