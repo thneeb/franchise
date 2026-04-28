@@ -104,7 +104,8 @@ public class FranchiseController implements FranchiseApi {
         for (int i = 0; i < history.size(); i++) {
             DrawStep step = new DrawStep()
                     .index(i)
-                    .draw(toHumanDraw(history.get(i)));
+                    .draw(toHumanDraw(history.get(i)))
+                    .reason(history.get(i).getReason());
             if (!boards.isEmpty()) {
                 step.board(toGameField(boards.get(i), Set.of("cities", "players", "regions")));
             }
@@ -431,7 +432,8 @@ public class FranchiseController implements FranchiseApi {
                         ? result.getWinners().stream()
                                 .map(p -> PlayerColor.valueOf(p.name()))
                                 .toList()
-                        : List.of());
+                        : List.of())
+                .reason(result.getDraw().getReason());
     }
 
     private List<InfluenceRound> toInfluenceRounds(List<InfluenceEvent> events) {
@@ -526,8 +528,6 @@ public class FranchiseController implements FranchiseApi {
         if ("LLM".equals(strategy)) {
             String model = parseString(params, "model", null);
             if (model != null) normalized.put("model", model);
-            String logReason = parseString(params, "logReason", null);
-            if (logReason != null) normalized.put("logReason", logReason);
             return normalized;
         }
         return params != null ? new LinkedHashMap<>(params) : Map.of();

@@ -75,13 +75,19 @@ Do not increase in a city or region where your opponent cannot realistically cha
 ### 6. Cut losses on unwinnable positions
 If your opponent leads a city or region by 2+ branches and few slots remain, **do not keep investing there**. The moves are better spent elsewhere. Specifically: if you trail in a city by 2+ and cannot realistically reach majority, take the 3rd-place region bonus and redirect your actions to open territory.
 
-### 7. Endgame scoring (last 8 rounds)
+### 7. Don't over-secure already-dominant positions
+If your branch count in a region **exceeds your opponent's by 4 or more**, your 1st-place finish is already mathematically locked — no opponent increase can catch you. Do not waste further increases there. Redirect those actions to extend into new cities or contest regions that are still undecided. Repeatedly increasing in a region you lead 7–1 is the single biggest waste of turns in the game.
+
+### 8. Always read the current board state before deciding
+**Before choosing a move, count your branches and your opponent's branches in each region from the board state provided above.** Do not rely on assumptions from earlier in the game — regions may have already closed, leads may have shifted, and cities you assumed were safe may now be contested. Base your reasoning strictly on the numbers shown.
+
+### 9. Endgame scoring (last 8 rounds)
 When most regions are nearly closed, shift to maximising increases in regions where you lead. Income converts to influence at game end — every branch in a won region is worth more than a branch in a lost one.
 
-### 8. Contest dangerous opponent leads
+### 10. Contest dangerous opponent leads
 If your opponent leads a high-value region (Grand Canyon, Florida) by 2+ branches, contest it immediately before it becomes unassailable.
 
-### 9. Kansas City / St Louis trap
+### 11. Kansas City / St Louis trap
 These cities appear central and high-value, but over-investing in them (multiple increases early) while the opponent sweeps Texas and the Southwest is a losing trade. Establish a presence, then move west.
 
 ## Output Format

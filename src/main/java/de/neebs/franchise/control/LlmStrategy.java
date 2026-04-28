@@ -62,20 +62,15 @@ public class LlmStrategy implements GameStrategy {
         List<DrawRecord> candidates = filterSkip(moves);
 
         String model = parseString(params, "model", DEFAULT_MODEL);
-        boolean logReason = "true".equalsIgnoreCase(parseString(params, "logReason", "false"));
 
         String userPrompt = buildUserPrompt(state, player, candidates);
         String response = llmClient.complete(model, systemPrompt, userPrompt);
 
         int chosen = parseChosenIndex(response, candidates.size());
-        DrawRecord chosen_move = candidates.get(chosen);
+        DrawRecord chosenMove = candidates.get(chosen);
+        chosenMove.setReason(extractReason(response));
 
-        if (logReason && response != null) {
-            String reason = extractReason(response);
-            log.info("[LLM] {} chose {} — {}", player, formatMove(chosen_move), reason);
-        }
-
-        return chosen_move;
+        return chosenMove;
     }
 
     // -------------------------------------------------------------------------

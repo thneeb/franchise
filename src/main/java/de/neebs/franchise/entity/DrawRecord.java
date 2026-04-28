@@ -8,6 +8,7 @@ public class DrawRecord {
     private List<City> extension;
     private List<City> increase;
     private BonusTileUsage bonusTileUsage;
+    private String reason;
 
     public PlayerColor getColor() { return color; }
     public void setColor(PlayerColor color) { this.color = color; }
@@ -20,4 +21,7 @@ public class DrawRecord {
 
     public BonusTileUsage getBonusTileUsage() { return bonusTileUsage; }
     public void setBonusTileUsage(BonusTileUsage bonusTileUsage) { this.bonusTileUsage = bonusTileUsage; }
+
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
 }

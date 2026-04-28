@@ -213,6 +213,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerColor'
+        reason:
+          type: string
+          description: Strategic reasoning provided by the LLM strategy, null for other strategies
     ExecutedDraw:
       properties:
         color:
@@ -638,6 +641,9 @@ components:
           $ref: '#/components/schemas/HumanDraw'
         board:
           $ref: '#/components/schemas/GameField'
+        reason:
+          type: string
+          description: Strategic reasoning provided by the LLM strategy, null for other strategies
     Region:
       enum:
         - CALIFORNIA
