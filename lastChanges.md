@@ -82,7 +82,83 @@ Model backed up: `src/main/resources/q-learning/backup/*_20260428_085856.json`
 
 ---
 
-## Next Steps
+## Human Play-Test Game Analysis (game b1b5cad6)
 
-- Investigate whether further STRATEGIC_Q improvements can break the ceiling
-- Or accept 95% and use the model as-is for human play testing
+RED (human) 75 : BLUE (Q_LEARNING) 60 — human wins by 15.
+
+### Two critical AI mistakes identified
+
+**1. Little Rock → Houston miss**
+BLUE entered LITTLE_ROCK on draw 6 (the natural gateway to the Texas corridor),
+but then played JACKSONVILLE + Atlanta increase on draw 10 instead of extending
+to HOUSTON. RED took HOUSTON unopposed on draw 15. Result: RED owned the entire
+Deep South (Houston, Dallas, Oklahoma City, El Paso) while BLUE had no foothold.
+
+Root cause: the model scores cities in isolation and does not see that
+LITTLE_ROCK → HOUSTON → DALLAS is a connected strategic chain worth
+claiming as a unit. It preferred contesting an already-safe eastern city
+over opening a new region.
+
+**2. Atlanta increase too early (draws 6 + 10)**
+BLUE increased in ATLANTA when it already had exclusive presence across the
+entire Southeast (Montgomery, Huntsville, Atlanta) with zero RED presence.
+ATLANTA is odd-sized (5 slots): BLUE wins the city as long as RED cannot reach
+majority — and RED had no path there. Both increase actions were wasted turns
+that should have been the Houston extension.
+
+Root cause: the model increases where it already leads instead of extending
+where the opponent is about to dominate.
+
+### Proposed STRATEGIC_Q improvements (future)
+
+- **Regional chain rule:** when a player holds a city adjacent to an uncontested
+  region gateway (e.g. LITTLE_ROCK → HOUSTON), prefer extending into that
+  gateway before the opponent can.
+- **Safe-city increase guard:** do not increase in a city/region where no
+  opponent can realistically reach majority within 2–3 turns.
+
+---
+
+## City-Variant Training (in progress)
+
+**Motivation:** the 95% ceiling against a single STRATEGIC_Q opponent means the
+model has saturated learning against one fixed style. Different starting cities
+produce fundamentally different game graphs. Training a separate model for each
+of the 22 size-1 cities, then doing self-play against all of them as frozen
+opponents, exposes the main model to a much wider distribution of game openings.
+
+**New infrastructure:**
+- `STRATEGIC_Q` accepts optional `startCity` param — always opens in that city
+- `Q_LEARNING` / `Q_LEARNING_FROZEN` accept optional `modelVariant` param —
+  loads/saves a city-suffixed model file (e.g. `…-INDIANAPOLIS.json`)
+- `bin/init_city_models.sh` — copies base model to all 22 city variants (done)
+- `bin/train_city_variants.sh` — trains each variant vs STRATEGIC_Q(startCity=X)
+- `bin/train_multi_self_play.sh` — trains main model vs all 22 frozen variants
+
+**Training pipeline:**
+```
+bin/init_city_models.sh             ✓ done (22 variants created from 150k base)
+bin/train_city_variants.sh 10 500   ✓ done (each variant: 150k → 155k runs)
+bin/train_multi_self_play.sh 5 200  ✓ done (main model: 150k → 162k runs)
+```
+
+**City-variant win rates** (Q_LEARNING RED vs STRATEGIC_Q with startCity, final batch):
+
+| City | Win% | | City | Win% |
+|---|---|---|---|---|
+| LITTLE_ROCK | 76% | hardest | EL_PASO | 91% | easiest |
+| MONTGOMERY | 78% | | SALT_LAKE_CITY | 90% | |
+| MEMPHIS | 78% | | FLAGSTAFF | 83% | |
+| RALEIGH | 81% | | HUNTSVILLE | 85% | |
+
+Southeast/central starts (LITTLE_ROCK, MONTGOMERY) are the toughest opponents —
+confirms the game analysis: a southeastern gateway start is the hardest position to beat.
+
+**Benchmark after multi-self-play:** Q_LEARNING 91% vs STRATEGIC_Q (was 95% before).
+Small regression — city-variant opponents were weaker than STRATEGIC_Q, diluting the
+STRATEGIC_Q-specific adaptation. The model now handles more diverse openings.
+
+Note: blocked-region cities (LAS_VEGAS, RENO, SPOKANE, BOISE, POCATELLO, CONRAD,
+BILLINGS, CASPER, FARGO, SIOUX_FALLS) were included in the first run but have been
+removed from all scripts — irrelevant for 2-player games.
+City variant model files are gitignored (regenerable via training scripts).

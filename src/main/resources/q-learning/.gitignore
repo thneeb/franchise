@@ -1,0 +1,26 @@
+# City-variant models — regenerated via init_city_models.sh + train_city_variants.sh
+*-BILLINGS*.json
+*-BOISE*.json
+*-CASPER*.json
+*-CONRAD*.json
+*-DODGE_CITY*.json
+*-EL_PASO*.json
+*-FARGO*.json
+*-FLAGSTAFF*.json
+*-HUNTSVILLE*.json
+*-INDIANAPOLIS*.json
+*-LAS_VEGAS*.json
+*-LITTLE_ROCK*.json
+*-MEMPHIS*.json
+*-MONTGOMERY*.json
+*-OGALLALA*.json
+*-POCATELLO*.json
+*-PUEBLO*.json
+*-RALEIGH*.json
+*-RENO*.json
+*-SALT_LAKE_CITY*.json
+*-SIOUX_FALLS*.json
+*-SPOKANE*.json
+
+# Local backups
+backup/
