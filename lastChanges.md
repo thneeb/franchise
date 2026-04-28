@@ -70,7 +70,19 @@ that increase candidates are still in scope when the late-game filter fires.
 
 ---
 
+## Self-Play Training (run 1)
+
+20 batches × 500 games, RED=Q_LEARNING (ε=0.1) vs BLUE=Q_LEARNING_FROZEN.
+Model reached **150 000 runs**. Benchmark vs STRATEGIC_Q: **94%** (flat vs 95% before).
+
+Self-play trains the model against itself and did not improve the STRATEGIC_Q benchmark —
+the 95% ceiling is likely the upper limit of what supervised-opponent training can achieve.
+
+Model backed up: `src/main/resources/q-learning/backup/*_20260428_085856.json`
+
+---
+
 ## Next Steps
 
-- Consider self-play training (`bin/train_self_play.sh`) to push beyond the STRATEGIC_Q ceiling
-- Or run another 20-batch round against STRATEGIC_Q to check for further gains
+- Investigate whether further STRATEGIC_Q improvements can break the ceiling
+- Or accept 95% and use the model as-is for human play testing
