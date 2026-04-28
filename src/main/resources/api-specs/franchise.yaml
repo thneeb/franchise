@@ -398,6 +398,7 @@ components:
         - Q_LEARNING_FROZEN
         - STRATEGIC_Q
         - DL4J_NEURAL_NETWORK
+        - LLM
     PlayerRegion:
       properties:
         color:
