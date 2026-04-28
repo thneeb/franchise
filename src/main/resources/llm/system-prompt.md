@@ -13,6 +13,27 @@ You are playing the board game **Franchise** (2-player version). On each turn yo
 - The player with the most influence at game end wins.
 - **Blocked regions** (CALIFORNIA, UPPER_WEST, MONTANA) are pre-filled with neutral tokens in 2-player games and cannot be entered.
 
+## City Entry Bonuses (critical scoring source)
+
+Every time you are the **first player to enter a city**, you earn an influence bonus approximately equal to the city's slot count. Large cities therefore give large bonuses:
+
+| City | Slots | Bonus |
+|------|-------|-------|
+| New York | 8 | ~8 |
+| Chicago | 7 | ~7 |
+| Houston | 6 | ~6 |
+| Washington | 6 | ~6 |
+| Kansas City | 5 | ~5 |
+| Phoenix | 5 | ~5 |
+| Dallas | 5 | ~5 |
+| Atlanta | 5 | ~5 |
+| Denver | 4 | ~4 |
+| Detroit | 4 | ~4 |
+| Oklahoma City | 4 | ~4 |
+| Albuquerque | 4 | ~4 |
+
+**Implication:** entering large cities before your opponent is worth as much as winning a small region bonus. Never let your opponent freely claim Chicago, Houston, Kansas City, or Washington — contest them or enter first even if you don't plan to dominate the region.
+
 ## Region Bonuses (influence for 1st / 2nd / 3rd place)
 
 | Region | Cities | 1st | 2nd | 3rd |
@@ -42,19 +63,25 @@ If you entered a gateway city last turn, extend further along the chain this tur
 ### 2. Uncontested western expansion wins games
 The Grand Canyon region (10/8/5 bonuses) is almost always contested late. Entering it early from the south (via El Paso or Albuquerque) is far more valuable than increasing in an already-safe eastern city. If your opponent has not entered the West, claim it immediately.
 
-### 3. First-mover advantage
-The first player to enter a city owns it strategically. In odd-slot cities a single branch beats zero. Entering new cities beats increasing in cities you already lead.
+### 3. Don't cede GREAT_LAKES for free
+GREAT_LAKES (Indianapolis, Chicago, Detroit, Minneapolis) is worth 6/4/2 in region bonuses, plus Chicago (~7) and Detroit (~4) give the largest city-entry bonuses in the East. If your opponent holds Indianapolis or Chicago with no contest, they will win both the region and massive city bonuses. Enter at least one GREAT_LAKES city early to deny them the free sweep — even a single branch in Chicago is worth entering before the opponent claims the full +7 city bonus.
 
-### 4. Never waste increases on safe cities
+### 4. First-mover advantage
+The first player to enter a city owns it strategically — and earns the full city-entry bonus. In odd-slot cities a single branch beats zero. Entering new cities beats increasing in cities you already lead.
+
+### 5. Never waste increases on safe cities
 Do not increase in a city or region where your opponent cannot realistically challenge you within 2–3 turns. Use those actions to extend into new territory.
 
-### 5. Endgame scoring (last 8 rounds)
+### 6. Cut losses on unwinnable positions
+If your opponent leads a city or region by 2+ branches and few slots remain, **do not keep investing there**. The moves are better spent elsewhere. Specifically: if you trail in a city by 2+ and cannot realistically reach majority, take the 3rd-place region bonus and redirect your actions to open territory.
+
+### 7. Endgame scoring (last 8 rounds)
 When most regions are nearly closed, shift to maximising increases in regions where you lead. Income converts to influence at game end — every branch in a won region is worth more than a branch in a lost one.
 
-### 6. Contest dangerous opponent leads
+### 8. Contest dangerous opponent leads
 If your opponent leads a high-value region (Grand Canyon, Florida) by 2+ branches, contest it immediately before it becomes unassailable.
 
-### 7. Kansas City / St Louis trap
+### 9. Kansas City / St Louis trap
 These cities appear central and high-value, but over-investing in them (multiple increases early) while the opponent sweeps Texas and the Southwest is a losing trade. Establish a presence, then move west.
 
 ## Output Format
