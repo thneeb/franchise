@@ -16,7 +16,9 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -54,6 +56,23 @@ public class StrategicQStrategy implements GameStrategy {
             throw new IllegalStateException("No legal draws available for " + player);
         }
 
+        // Fixed start city: during initialization, extend to the designated city if still available.
+        // If the city was already taken (opponent went first), fall through to normal selection.
+        if (state.isInitialization()) {
+            String startCityParam = parseString(params, "startCity", null);
+            if (startCityParam != null) {
+                try {
+                    City startCity = City.valueOf(startCityParam.toUpperCase(Locale.ROOT));
+                    Optional<DrawRecord> startMove = moves.stream()
+                            .filter(m -> m.getExtension().contains(startCity))
+                            .findFirst();
+                    if (startMove.isPresent()) {
+                        return startMove.get();
+                    }
+                } catch (IllegalArgumentException ignored) {}
+            }
+        }
+
         List<DrawRecord> candidates = applyRules(moves, state, player);
 
         QLearningTarget target = QLearningTarget.fromParams(params);
@@ -70,6 +89,13 @@ public class StrategicQStrategy implements GameStrategy {
             }
         }
         return best;
+    }
+
+    private static String parseString(Map<String, Object> params, String key, String defaultValue) {
+        if (params == null) return defaultValue;
+        Object value = params.get(key);
+        if (value instanceof String s && !s.isBlank()) return s.trim();
+        return defaultValue;
     }
 
     private List<DrawRecord> applyRules(List<DrawRecord> moves, GameState state, PlayerColor player) {

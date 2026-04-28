@@ -37,7 +37,8 @@ public class FrozenQStrategy implements GameStrategy {
             throw new IllegalStateException("No legal draws available for " + player);
         }
         QLearningTarget target = QLearningTarget.fromParams(params);
-        NeuralNetwork network = modelService.getOrCreateFrozen(state.getPlayers().size(), target);
+        String modelVariant = parseString(params, "modelVariant", null);
+        NeuralNetwork network = modelService.getOrCreateFrozen(state.getPlayers().size(), target, modelVariant);
         DrawRecord best = null;
         float bestScore = Float.NEGATIVE_INFINITY;
         for (DrawRecord move : moves) {
@@ -49,5 +50,12 @@ public class FrozenQStrategy implements GameStrategy {
             }
         }
         return best;
+    }
+
+    private static String parseString(Map<String, Object> params, String key, String defaultValue) {
+        if (params == null) return defaultValue;
+        Object value = params.get(key);
+        if (value instanceof String s && !s.isBlank()) return s.trim();
+        return defaultValue;
     }
 }

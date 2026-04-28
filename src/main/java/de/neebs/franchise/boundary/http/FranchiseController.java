@@ -507,10 +507,20 @@ public class FranchiseController implements FranchiseApi {
         if ("Q_LEARNING".equals(strategy)) {
             normalized.put("epsilon", parseDouble(params, "epsilon", 0.0));
             normalized.put("trainingTarget", parseString(params, "trainingTarget", "TERMINAL_OUTCOME"));
+            String modelVariant = parseString(params, "modelVariant", null);
+            if (modelVariant != null) normalized.put("modelVariant", modelVariant);
             return normalized;
         }
         if ("Q_LEARNING_FROZEN".equals(strategy)) {
             normalized.put("trainingTarget", parseString(params, "trainingTarget", "TERMINAL_OUTCOME"));
+            String modelVariant = parseString(params, "modelVariant", null);
+            if (modelVariant != null) normalized.put("modelVariant", modelVariant);
+            return normalized;
+        }
+        if ("STRATEGIC_Q".equals(strategy)) {
+            normalized.put("trainingTarget", parseString(params, "trainingTarget", "TERMINAL_OUTCOME"));
+            String startCity = parseString(params, "startCity", null);
+            if (startCity != null) normalized.put("startCity", startCity);
             return normalized;
         }
         return params != null ? new LinkedHashMap<>(params) : Map.of();

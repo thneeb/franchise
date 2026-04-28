@@ -66,7 +66,8 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         }
 
         QLearningTarget trainingTarget = QLearningTarget.fromParams(params);
-        NeuralNetwork network = modelService.getOrCreate(state.getPlayers().size(), trainingTarget);
+        String modelVariant = parseString(params, "modelVariant", null);
+        NeuralNetwork network = modelService.getOrCreate(state.getPlayers().size(), trainingTarget, modelVariant);
         DrawRecord best = null;
         float bestScore = Float.NEGATIVE_INFINITY;
         for (DrawRecord move : candidates) {
@@ -123,10 +124,11 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         long trainingStart = System.nanoTime();
         long modelSaveNanos = 0L;
         Set<QLearningTarget> activeTargets = activeTargets(playerStrategies, playerParams);
+        String modelVariant = activeVariant(playerStrategies, playerParams);
         boolean trained = false;
 
         for (QLearningTarget trainingTarget : activeTargets) {
-            NeuralNetwork network = modelService.getOrCreate(numPlayers, trainingTarget);
+            NeuralNetwork network = modelService.getOrCreate(numPlayers, trainingTarget, modelVariant);
             ReplayBuffer<ValueTrainingSample> replayBuffer = replayBuffers.get(trainingTarget);
             List<ValueTrainingSample> freshSamples = buildSamples(
                     trajectory,
@@ -145,9 +147,9 @@ public class SelfPlayQStrategy implements TrainableStrategy {
             }
             network.setTrainingRuns(network.getTrainingRuns() + 1);
             long saveStart = System.nanoTime();
-            modelService.save(network, numPlayers, trainingTarget);
+            modelService.save(network, numPlayers, trainingTarget, modelVariant);
             if (network.getTrainingRuns() % FROZEN_SYNC_INTERVAL == 0) {
-                modelService.syncFrozenModel(numPlayers, trainingTarget);
+                modelService.syncFrozenModel(numPlayers, trainingTarget, modelVariant);
             }
             modelSaveNanos += System.nanoTime() - saveStart;
             trained = true;
@@ -169,11 +171,12 @@ public class SelfPlayQStrategy implements TrainableStrategy {
                                                        Map<PlayerColor, String> playerStrategies,
                                                        Map<PlayerColor, Map<String, Object>> playerParams,
                                                        String strategyName) {
+        String modelVariant = activeVariant(playerStrategies, playerParams);
         return activeTargets(playerStrategies, playerParams).stream()
                 .map(trainingTarget -> new TrainingRunCount(
                         strategyName,
                         trainingTarget.name(),
-                        modelService.getTrainingRuns(numPlayers, trainingTarget)))
+                        modelService.getTrainingRuns(numPlayers, trainingTarget, modelVariant)))
                 .toList();
     }
 
@@ -195,6 +198,23 @@ public class SelfPlayQStrategy implements TrainableStrategy {
         Object value = params.get(key);
         if (value instanceof Number number) return number.floatValue();
         return defaultValue;
+    }
+
+    private static String parseString(Map<String, Object> params, String key, String defaultValue) {
+        if (params == null) return defaultValue;
+        Object value = params.get(key);
+        if (value instanceof String s && !s.isBlank()) return s.trim();
+        return defaultValue;
+    }
+
+    private static String activeVariant(Map<PlayerColor, String> playerStrategies,
+                                        Map<PlayerColor, Map<String, Object>> playerParams) {
+        for (Map.Entry<PlayerColor, String> entry : playerStrategies.entrySet()) {
+            if (STRATEGY_NAME.equals(entry.getValue())) {
+                return parseString(playerParams.get(entry.getKey()), "modelVariant", null);
+            }
+        }
+        return null;
     }
 
     private List<ValueTrainingSample> buildSamples(List<GameState> trajectory,
