@@ -1,51 +1,76 @@
 # Last Changes
 
-## Bug Fix: Internal Server Error on COMPUTER draw after game over
+## New Rule: AvoidGivingOpponentRegionClosureRule (STRATEGIC_Q)
 
-`FranchiseService.computeBestDraw` now checks `state.isEnd()` first and throws
-`IllegalArgumentException("Game is already over")` — the existing exception handler
-returns a clean 400 instead of a 500.
+Prevents moves that reduce any open region to exactly **one remaining
+city slot**, which would let the opponent close it on their very next turn
+and claim the region track bonus. Moves that close the region themselves
+(zero slots remaining) are kept — closing is good.
 
 ---
 
-## Feature: Frozen Opponent for Q-Learning Self-Play
+## New Rule: SecureWinningRegionsLateRule (STRATEGIC_Q)
 
-Solves the "opponent gets weaker and weaker" problem when training Q_LEARNING vs Q_LEARNING.
-The root cause was both players sharing the same live network and updating it simultaneously,
-causing strategy cycling and catastrophic forgetting.
+**Trigger:** ≥ 6 of the 10 regions are closed (reliable late-game signal).
 
-The fix mirrors how AlphaZero works: the opponent plays from a **frozen snapshot** of the
-network and only advances in discrete jumps.
+When the endgame is reached, prefer **increase** moves in regions where
+the player strictly leads in branch count. Covers both open *and* closed
+regions, because increasing in a closed region still generates income → influence.
 
-### Changed files
+### Bug history
 
-**`SelfPlayQModelService`**
-- `getOrCreateFrozen()` — loads from a separate `...-frozen.json` file; if that file does
-  not exist yet, copies the live model as the initial snapshot
-- `syncFrozenModel()` — deep-copies the live network and writes it to the frozen file
-- `writeToFile()` — extracted shared atomic-write logic used by both save methods
+Two bugs were found and fixed during game analysis:
 
-**`SelfPlayQStrategy`**
-- Auto-syncs the frozen model every 100 training runs (`FROZEN_SYNC_INTERVAL = 100`)
+1. **Wrong trigger (original):** the rule measured null city slots in
+   unclosed regions. Regions close when every *city* in them has been
+   entered (extended to), **not** when all city slots are filled. The three
+   never-entered regions (CALIFORNIA, UPPER_WEST, MONTANA) had no entries
+   in `getCityBranches` → counted 0 open slots → the rule always fired
+   but found no player presence there → permanent no-op during the real
+   endgame.
 
-**`FrozenQStrategy`** (new, `@Component("Q_LEARNING_FROZEN")`)
-- Identical move selection to `Q_LEARNING` but reads the frozen snapshot
-- Does NOT implement `TrainableStrategy` — never updates any weights
+2. **Wrong scope (original):** the rule only searched *open* regions for a
+   leading position. After 6+ regions closed, the player may lead in closed
+   regions (e.g. FLORIDA, TEXAS for BLUE) with many unfilled city slots.
+   Increases there boost income and are exactly what a trailing player needs.
 
-**`franchise.yaml` + `FranchiseController`**
-- `Q_LEARNING_FROZEN` added as a valid `ComputerStrategy` in the API
-- No epsilon parameter (frozen opponent always plays greedily)
+---
 
-**`SelfPlayQStrategyTest`**
-- Fixed pre-existing bug: test was mocking `getPossibleDrawsForState` but the strategy
-  calls `getPossibleStrategyDrawsForState`
+## Model Training
 
-### How to use
+Q_LEARNING trained in three runs (20 batches × 500 games each, ε 0.2 → 0.02,
+alternating sides) against the updated STRATEGIC_Q opponent:
 
-Set up a training run with:
-- `RED` → `Q_LEARNING` (learner, trains with epsilon)
-- `BLUE` → `Q_LEARNING_FROZEN` (stable opponent, never trains)
-- `learningModels: [Q_LEARNING]`
+| Checkpoint | Training runs | Benchmark vs STRATEGIC_Q | Notes |
+|---|---|---|---|
+| Before this session | 110 000 | 73 % | — |
+| After run 1 | 120 000 | — | vs STRATEGIC_Q with AvoidGivingOpponentRegionClosureRule |
+| After run 2 | 130 000 | — | vs STRATEGIC_Q with SecureWinningRegionsLateRule (original, buggy) |
+| After run 3 | 140 000 | **95 %** | vs STRATEGIC_Q with SecureWinningRegionsLateRule (fixed) |
 
-Every 100 games the frozen opponent advances to the latest learner snapshot.
-The learner always trains against a stable target, breaking the degradation cycle.
+Model backed up: `src/main/resources/q-learning/backup/*_20260428_084325.json`
+
+---
+
+## Rule Order in STRATEGIC_Q (final)
+
+```
+1. AvoidSkipWhenMovesAvailableRule
+2. UseExtensionBonusTileEarlyRule      (rounds 1–5)
+3. AvoidIncreaseInSafeCityRule
+4. SecureWinningRegionsLateRule        (≥6 regions closed)
+5. PreferRegionLeadExtensionRule
+6. ContestOpponentRegionRule
+7. AvoidExpensiveExtensionRule         (connection cost ≥ 8)
+8. AvoidGivingOpponentRegionClosureRule
+```
+
+Rule 4 is placed **before** the extension-preference rules (5, 6, 7) so
+that increase candidates are still in scope when the late-game filter fires.
+
+---
+
+## Next Steps
+
+- Consider self-play training (`bin/train_self_play.sh`) to push beyond the STRATEGIC_Q ceiling
+- Or run another 20-batch round against STRATEGIC_Q to check for further gains
