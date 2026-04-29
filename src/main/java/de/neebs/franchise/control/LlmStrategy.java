@@ -27,8 +27,7 @@ import java.util.stream.Collectors;
  * Falls back to the first non-skip candidate if the API call fails.
  *
  * Params:
- *   model        — OpenRouter model ID (default: anthropic/claude-haiku-4-5)
- *   logReason    — if "true", logs the LLM's reasoning to stdout (default: false)
+ *   model  — OpenRouter model ID (default: anthropic/claude-haiku-4-5)
  */
 @Component("LLM")
 public class LlmStrategy implements GameStrategy {
@@ -40,14 +39,17 @@ public class LlmStrategy implements GameStrategy {
     private final FranchiseService franchiseService;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
+    private final RegionClosureService regionClosureService;
     private final String systemPrompt;
 
     public LlmStrategy(@Lazy FranchiseService franchiseService,
                        LlmClient llmClient,
-                       ObjectMapper objectMapper) {
+                       ObjectMapper objectMapper,
+                       RegionClosureService regionClosureService) {
         this.franchiseService = franchiseService;
         this.llmClient = llmClient;
         this.objectMapper = objectMapper;
+        this.regionClosureService = regionClosureService;
         this.systemPrompt = loadSystemPrompt();
     }
 
@@ -131,6 +133,31 @@ public class LlmStrategy implements GameStrategy {
             cityLines.forEach(line -> sb.append(line).append('\n'));
         }
         sb.append('\n');
+
+        // Region closure analysis
+        List<RegionClosureService.RegionClosureInfo> closure = regionClosureService.analyze(state);
+        if (!closure.isEmpty()) {
+            sb.append("**Region Closure Analysis** (extends needed to close each open region):\n");
+            for (RegionClosureService.RegionClosureInfo info : closure) {
+                RegionClosureService.ClosurePlayerInfo you = info.byPlayer().get(player);
+                RegionClosureService.ClosurePlayerInfo opp = opponent != null ? info.byPlayer().get(opponent) : null;
+                String youStr = you == null ? "?" :
+                        String.format("YOU %d extends [%s]%s",
+                                you.minExtendsToClose(),
+                                you.closingPath().stream().map(City::name).collect(Collectors.joining("→")),
+                                you.canCloseNextTurn() ? " ⚡CLOSEABLE NOW" : "");
+                String oppStr = opp == null ? "" :
+                        String.format(" | OPP %d extends [%s]%s",
+                                opp.minExtendsToClose(),
+                                opp.closingPath().stream().map(City::name).collect(Collectors.joining("→")),
+                                opp.canCloseNextTurn() ? " ⚡CLOSEABLE NOW" : "");
+                String lead = you != null && you.leads() ? " YOU LEAD" :
+                        opp != null && opp.leads() ? " OPP LEADS" : " TIED/NONE";
+                sb.append(String.format("  %s (%d open cities,%s): %s%s\n",
+                        info.region().getName(), info.openCityCount(), lead, youStr, oppStr));
+            }
+            sb.append('\n');
+        }
 
         // Possible moves
         sb.append("**Your Possible Moves** (choose one by index, 0-based):\n");

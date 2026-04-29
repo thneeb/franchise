@@ -2,6 +2,7 @@ package de.neebs.franchise.boundary.http;
 
 import de.neebs.franchise.boundary.http.model.*;
 import de.neebs.franchise.control.FranchiseService;
+import de.neebs.franchise.control.RegionClosureService;
 import de.neebs.franchise.entity.CalibrationConfig;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.DrawResult;
@@ -32,9 +33,11 @@ import java.util.stream.Collectors;
 public class FranchiseController implements FranchiseApi {
 
     private final FranchiseService franchiseService;
+    private final RegionClosureService regionClosureService;
 
-    public FranchiseController(FranchiseService franchiseService) {
+    public FranchiseController(FranchiseService franchiseService, RegionClosureService regionClosureService) {
         this.franchiseService = franchiseService;
+        this.regionClosureService = regionClosureService;
     }
 
     @Override
@@ -112,6 +115,43 @@ public class FranchiseController implements FranchiseApi {
             steps.add(step);
         }
         return ResponseEntity.ok(steps);
+    }
+
+    @Override
+    public ResponseEntity<List<RegionClosureInfo>> getRegionClosureAnalysis(String gameId) {
+        GameState state = franchiseService.getGame(gameId);
+        List<RegionClosureService.RegionClosureInfo> analysis = regionClosureService.analyze(state);
+        List<RegionClosureInfo> response = analysis.stream()
+                .map(this::toRegionClosureInfo)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
+    }
+
+    private RegionClosureInfo toRegionClosureInfo(RegionClosureService.RegionClosureInfo info) {
+        Map<String, de.neebs.franchise.boundary.http.model.ClosurePlayerInfo> byPlayer = new LinkedHashMap<>();
+        info.byPlayer().forEach((color, pi) -> byPlayer.put(color.name(), toClosurePlayerInfo(pi)));
+        return new RegionClosureInfo()
+                .region(de.neebs.franchise.boundary.http.model.Region.valueOf(info.region().name()))
+                .bonus1st(info.region().getFirst())
+                .bonus2nd(info.region().getSecond())
+                .bonus3rd(info.region().getThird())
+                .openCityCount(info.openCityCount())
+                .openCities(info.openCities().stream()
+                        .map(c -> City.valueOf(c.name()))
+                        .collect(Collectors.toList()))
+                .byPlayer(byPlayer);
+    }
+
+    private de.neebs.franchise.boundary.http.model.ClosurePlayerInfo toClosurePlayerInfo(
+            RegionClosureService.ClosurePlayerInfo pi) {
+        return new de.neebs.franchise.boundary.http.model.ClosurePlayerInfo()
+                .branches(pi.branches())
+                .leads(pi.leads())
+                .minExtendsToClose(pi.minExtendsToClose())
+                .canCloseNextTurn(pi.canCloseNextTurn())
+                .closingPath(pi.closingPath().stream()
+                        .map(c -> City.valueOf(c.name()))
+                        .collect(Collectors.toList()));
     }
 
     @Override

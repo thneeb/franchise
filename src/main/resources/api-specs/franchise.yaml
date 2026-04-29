@@ -164,6 +164,25 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/CalibrationResult'
+  /franchise/{gameId}/region-analysis:
+    parameters:
+      -
+        name: gameId
+        schema:
+          type: string
+        required: true
+        in: path
+    get:
+      operationId: getRegionClosureAnalysis
+      responses:
+        '200':
+          description: Returns closure analysis for all active open regions — how many extends each player needs to close each region and in what order
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegionClosureInfo'
   /franchise/{gameId}/learnings:
     parameters:
       -
@@ -644,6 +663,45 @@ components:
         reason:
           type: string
           description: Strategic reasoning provided by the LLM strategy, null for other strategies
+    RegionClosureInfo:
+      type: object
+      properties:
+        region:
+          $ref: '#/components/schemas/Region'
+        bonus1st:
+          type: integer
+        bonus2nd:
+          type: integer
+        bonus3rd:
+          type: integer
+        openCityCount:
+          type: integer
+        openCities:
+          type: array
+          items:
+            $ref: '#/components/schemas/City'
+        byPlayer:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ClosurePlayerInfo'
+    ClosurePlayerInfo:
+      type: object
+      properties:
+        branches:
+          type: integer
+        leads:
+          type: boolean
+        minExtendsToClose:
+          type: integer
+          description: Total number of extend actions needed to close this region (0 if region already closed)
+        canCloseNextTurn:
+          type: boolean
+          description: True if this player can close the region in a single move (1 extend, or 2 with bonus tile)
+        closingPath:
+          type: array
+          description: Ordered list of cities to extend to; may include transit cities outside the region needed to reach isolated region cities
+          items:
+            $ref: '#/components/schemas/City'
     Region:
       enum:
         - CALIFORNIA
