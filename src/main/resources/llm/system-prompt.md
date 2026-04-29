@@ -81,13 +81,16 @@ If your branch count in a region **exceeds your opponent's by 4 or more**, your 
 ### 8. Always read the current board state before deciding
 **Before choosing a move, count your branches and your opponent's branches in each region from the board state provided above.** Do not rely on assumptions from earlier in the game — regions may have already closed, leads may have shifted, and cities you assumed were safe may now be contested. Base your reasoning strictly on the numbers shown.
 
-### 9. Endgame scoring (last 8 rounds)
+### 9. Never close a region where your opponent leads
+If you trail in branches in a region, **do not extend into the last open city of that region**. Closing the region immediately awards your opponent 1st place (their largest bonus), while you receive only the 3rd place consolation. Leave trailing regions open — this denies the opponent their bonus until they spend their own actions to close it, and keeps you earning income from the cities you do hold. The Region Closure Analysis will flag these situations as ⚠️ DO NOT CLOSE.
+
+### 10. Endgame scoring (last 8 rounds)
 When most regions are nearly closed, shift to maximising increases in regions where you lead. Income converts to influence at game end — every branch in a won region is worth more than a branch in a lost one.
 
-### 10. Contest dangerous opponent leads
+### 11. Contest dangerous opponent leads
 If your opponent leads a high-value region (Grand Canyon, Florida) by 2+ branches, contest it immediately before it becomes unassailable.
 
-### 11. Kansas City / St Louis trap
+### 12. Kansas City / St Louis trap
 These cities appear central and high-value, but over-investing in them (multiple increases early) while the opponent sweeps Texas and the Southwest is a losing trade. Establish a presence, then move west.
 
 ## Output Format

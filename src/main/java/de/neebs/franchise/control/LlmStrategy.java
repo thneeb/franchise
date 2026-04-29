@@ -137,24 +137,33 @@ public class LlmStrategy implements GameStrategy {
         // Region closure analysis
         List<RegionClosureService.RegionClosureInfo> closure = regionClosureService.analyze(state);
         if (!closure.isEmpty()) {
-            sb.append("**Region Closure Analysis** (extends needed to close each open region):\n");
+            sb.append("**Region Closure Analysis** (strategic verdict per region):\n");
             for (RegionClosureService.RegionClosureInfo info : closure) {
                 RegionClosureService.ClosurePlayerInfo you = info.byPlayer().get(player);
                 RegionClosureService.ClosurePlayerInfo opp = opponent != null ? info.byPlayer().get(opponent) : null;
+                int yourBranches = you != null ? you.branches() : 0;
+                int oppBranches = opp != null ? opp.branches() : 0;
+
+                String verdict;
+                if (yourBranches > oppBranches) {
+                    verdict = "✅ CLOSE NOW — you lead, closing wins you 1st place";
+                } else if (oppBranches > yourBranches && opp != null && opp.canCloseNextTurn()) {
+                    verdict = "🚨 BLOCK — opponent leads and can close next turn, taking 1st place from you";
+                } else if (oppBranches > yourBranches) {
+                    verdict = "⚠️ DO NOT CLOSE — you trail; closing triggers opponent's 1st place bonus";
+                } else {
+                    verdict = "CONTEST — tied; whoever closes first wins";
+                }
+
                 String youStr = you == null ? "?" :
-                        String.format("YOU %d extends [%s]%s",
-                                you.minExtendsToClose(),
-                                you.closingPath().stream().map(City::name).collect(Collectors.joining("→")),
-                                you.canCloseNextTurn() ? " ⚡CLOSEABLE NOW" : "");
+                        String.format("YOU %d extends [%s]", you.minExtendsToClose(),
+                                you.closingPath().stream().map(City::name).collect(Collectors.joining("→")));
                 String oppStr = opp == null ? "" :
-                        String.format(" | OPP %d extends [%s]%s",
-                                opp.minExtendsToClose(),
-                                opp.closingPath().stream().map(City::name).collect(Collectors.joining("→")),
-                                opp.canCloseNextTurn() ? " ⚡CLOSEABLE NOW" : "");
-                String lead = you != null && you.leads() ? " YOU LEAD" :
-                        opp != null && opp.leads() ? " OPP LEADS" : " TIED/NONE";
-                sb.append(String.format("  %s (%d open cities,%s): %s%s\n",
-                        info.region().getName(), info.openCityCount(), lead, youStr, oppStr));
+                        String.format(" | OPP %d extends [%s]", opp.minExtendsToClose(),
+                                opp.closingPath().stream().map(City::name).collect(Collectors.joining("→")));
+                sb.append(String.format("  %s (%d open cities, you:%d opp:%d) → %s | %s%s\n",
+                        info.region().getName(), info.openCityCount(), yourBranches, oppBranches,
+                        verdict, youStr, oppStr));
             }
             sb.append('\n');
         }
