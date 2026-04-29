@@ -17,7 +17,6 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,17 +38,14 @@ public class LlmStrategy implements GameStrategy {
     private final FranchiseService franchiseService;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
-    private final RegionClosureService regionClosureService;
     private final String systemPrompt;
 
     public LlmStrategy(@Lazy FranchiseService franchiseService,
                        LlmClient llmClient,
-                       ObjectMapper objectMapper,
-                       RegionClosureService regionClosureService) {
+                       ObjectMapper objectMapper) {
         this.franchiseService = franchiseService;
         this.llmClient = llmClient;
         this.objectMapper = objectMapper;
-        this.regionClosureService = regionClosureService;
         this.systemPrompt = loadSystemPrompt();
     }
 
@@ -134,39 +130,75 @@ public class LlmStrategy implements GameStrategy {
         }
         sb.append('\n');
 
-        // Region closure analysis
-        List<RegionClosureService.RegionClosureInfo> closure = regionClosureService.analyze(state);
-        if (!closure.isEmpty()) {
-            sb.append("**Region Closure Analysis** (strategic verdict per region):\n");
-            for (RegionClosureService.RegionClosureInfo info : closure) {
-                RegionClosureService.ClosurePlayerInfo you = info.byPlayer().get(player);
-                RegionClosureService.ClosurePlayerInfo opp = opponent != null ? info.byPlayer().get(opponent) : null;
-                int yourBranches = you != null ? you.branches() : 0;
-                int oppBranches = opp != null ? opp.branches() : 0;
+        // Region majority analysis — shows what's actually needed to close each region
+        sb.append("**Region Majority Analysis** (regions close only when ALL large cities are SCORED via majority):\n");
+        for (Region region : Region.values()) {
+            if (state.getInactiveRegions().contains(region)) continue;
 
-                String verdict;
-                if (yourBranches > oppBranches) {
-                    verdict = "✅ CLOSE NOW — you lead, closing wins you 1st place";
-                } else if (oppBranches > yourBranches && opp != null && opp.canCloseNextTurn()) {
-                    verdict = "🚨 BLOCK — opponent leads and can close next turn, taking 1st place from you";
-                } else if (oppBranches > yourBranches) {
-                    verdict = "⚠️ DO NOT CLOSE — you trail; closing triggers opponent's 1st place bonus";
-                } else {
-                    verdict = "CONTEST — tied; whoever closes first wins";
+            int yourTotal = 0, oppTotal = 0;
+            for (City c : region.getCities()) {
+                PlayerColor[] slots = state.getCityBranches().get(c);
+                if (slots == null) continue;
+                for (PlayerColor s : slots) {
+                    if (s == player) yourTotal++;
+                    else if (s == opponent) oppTotal++;
                 }
-
-                String youStr = you == null ? "?" :
-                        String.format("YOU %d extends [%s]", you.minExtendsToClose(),
-                                you.closingPath().stream().map(City::name).collect(Collectors.joining("→")));
-                String oppStr = opp == null ? "" :
-                        String.format(" | OPP %d extends [%s]", opp.minExtendsToClose(),
-                                opp.closingPath().stream().map(City::name).collect(Collectors.joining("→")));
-                sb.append(String.format("  %s (%d open cities, you:%d opp:%d) → %s | %s%s\n",
-                        info.region().getName(), info.openCityCount(), yourBranches, oppBranches,
-                        verdict, youStr, oppStr));
             }
-            sb.append('\n');
+
+            if (state.getClosedRegions().contains(region)) {
+                String winner = yourTotal > oppTotal ? "YOU 1st" : oppTotal > yourTotal ? "OPP 1st" : "TIED";
+                sb.append(String.format("  %s [CLOSED — %s]\n", region.getName(), winner));
+                continue;
+            }
+
+            String verdict;
+            if (yourTotal > oppTotal) verdict = "✅ CLOSE NOW — you lead; keep increasing to score cities";
+            else if (oppTotal > yourTotal) verdict = "⚠️ DO NOT CLOSE — you trail; don't trigger opponent's 1st bonus";
+            else verdict = "CONTEST — tied; first to score cities wins";
+
+            sb.append(String.format("  %s (you:%d opp:%d) → %s\n",
+                    region.getName(), yourTotal, oppTotal, verdict));
+
+            for (City city : region.getCities().stream()
+                    .sorted(java.util.Comparator.comparing(Enum::name))
+                    .collect(Collectors.toList())) {
+
+                PlayerColor[] slots = state.getCityBranches().get(city);
+                if (city.getSize() == 1) {
+                    boolean entered = slots != null && Arrays.stream(slots).anyMatch(s -> s != null);
+                    if (!entered) {
+                        sb.append(String.format("    %s [town]: NOT ENTERED — need 1 extend\n", city.name()));
+                    }
+                } else {
+                    if (state.getClosedCities().contains(city)) {
+                        sb.append(String.format("    %s: SCORED ✓\n", city.name()));
+                    } else {
+                        int total = city.getSize();
+                        int majorityNeeded = total / 2 + 1;
+                        int myB = 0, oppB = 0;
+                        if (slots != null) {
+                            for (PlayerColor s : slots) {
+                                if (s == player) myB++;
+                                else if (s == opponent) oppB++;
+                            }
+                        }
+                        String myStr = myB == 0
+                                ? String.format("YOU not here (need 1 ext + %d inc)", majorityNeeded)
+                                : myB * 2 > total
+                                        ? "YOU have majority already — score imminent"
+                                        : String.format("YOU %d/%d → need %d more increases", myB, total, majorityNeeded - myB);
+                        String oppStr = oppB == 0
+                                ? "OPP not here"
+                                : oppB * 2 > total
+                                        ? "OPP has majority — will score next!"
+                                        : String.format("OPP %d/%d → needs %d more", oppB, total, majorityNeeded - oppB);
+                        sb.append(String.format("    %s [%d slots, majority=%d+, bonus=%dpts]: %s | %s\n",
+                                city.name(), total, majorityNeeded, total, myStr, oppStr));
+                    }
+                }
+            }
         }
+        sb.append('\n');
 
         // Possible moves
         sb.append("**Your Possible Moves** (choose one by index, 0-based):\n");

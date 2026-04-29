@@ -5,34 +5,34 @@ You are playing the board game **Franchise** (2-player version). On each turn yo
 ## Game Rules Summary
 
 - Two players (BLUE and RED) alternate turns.
-- Each turn a player may **extend** (place a first branch in a new city) and/or **increase** (add an extra branch to a city already entered). Some turns allow a bonus tile that enables a second extension or a free increase.
-- Cities have multiple branch slots. Any number of players can enter a city, each occupying one slot. You enter a city by extending into it via an adjacent connection.
-- **Regions** are groups of cities. A region closes when every city in it has been entered by at least one player. When a region closes, players are ranked by total branch count in that region — 1st, 2nd, 3rd places receive influence bonuses (listed below).
-- **Income** is the number of cities you have entered (one entry per city regardless of branch count). Each round you gain income × money.
-- **Influence** is your score. You gain influence from region bonuses, and at game end from income × remaining turns.
+- Each turn a player may **extend** (place a first branch in a new city via an adjacent connection) and/or **increase** (add an extra branch to a city already entered). Some turns allow a bonus tile that enables a second extension or a free increase.
+- Cities have multiple branch slots. You enter a city by extending. You add more branches by increasing.
+- **City scoring (CRITICAL MECHANIC)**: A large city (2+ slots) is **scored** and awards influence when one player holds **more than half** of its total slots (absolute majority). The majority holder gets influence equal to the city's slot count. After scoring, the winner keeps exactly 1 branch (all extras returned to supply) — other players keep their 1 branch. The city is then permanently "closed." Towns (1-slot cities) close and award a small bonus immediately when first entered.
+- **Regions** close when ALL their cities are closed: every town entered, every large city scored. Only then do the region 1st/2nd/3rd place bonuses pay out.
+- **Income**: Each round your income equals the total number of **empty slots** in all open (un-scored) large cities where you have at least one branch. More empty slots in your un-scored cities = higher income.
 - The player with the most influence at game end wins.
 - **Blocked regions** (CALIFORNIA, UPPER_WEST, MONTANA) are pre-filled with neutral tokens in 2-player games and cannot be entered.
 
-## City Entry Bonuses (critical scoring source)
+## City Scoring Bonuses — HOW TO ACTUALLY EARN THEM
 
-Every time you are the **first player to enter a city**, you earn an influence bonus approximately equal to the city's slot count. Large cities therefore give large bonuses:
+**You do NOT earn a bonus merely by entering a city.** The bonus is awarded only when you **score** the city by achieving absolute majority. Until you hold majority, your branch earns zero influence from that city.
 
-| City | Slots | Bonus |
-|------|-------|-------|
-| New York | 8 | ~8 |
-| Chicago | 7 | ~7 |
-| Houston | 6 | ~6 |
-| Washington | 6 | ~6 |
-| Kansas City | 5 | ~5 |
-| Phoenix | 5 | ~5 |
-| Dallas | 5 | ~5 |
-| Atlanta | 5 | ~5 |
-| Denver | 4 | ~4 |
-| Detroit | 4 | ~4 |
-| Oklahoma City | 4 | ~4 |
-| Albuquerque | 4 | ~4 |
+| City | Slots | Majority needed | Scoring bonus |
+|------|-------|-----------------|---------------|
+| New York | 8 | 5+ branches | 8 pts |
+| Chicago | 7 | 4+ branches | 7 pts |
+| Houston | 6 | 4+ branches | 6 pts |
+| Washington | 6 | 4+ branches | 6 pts |
+| Kansas City | 5 | 3+ branches | 5 pts |
+| Phoenix | 5 | 3+ branches | 5 pts |
+| Dallas | 5 | 3+ branches | 5 pts |
+| Atlanta | 5 | 3+ branches | 5 pts |
+| Denver | 4 | 3+ branches | 4 pts |
+| Detroit | 4 | 3+ branches | 4 pts |
+| Oklahoma City | 4 | 3+ branches | 4 pts |
+| Albuquerque | 4 | 3+ branches | 4 pts |
 
-**Implication:** entering large cities before your opponent is worth as much as winning a small region bonus. Never let your opponent freely claim Chicago, Houston, Kansas City, or Washington — contest them or enter first even if you don't plan to dominate the region.
+**Key implication**: Entering New York earns you 0 points. Increasing to 5/8 branches earns you 8 points. Entering and abandoning is the worst possible play for high-slot cities.
 
 ## Region Bonuses (influence for 1st / 2nd / 3rd place)
 
@@ -53,45 +53,50 @@ Every time you are the **first player to enter a city**, you earn an influence b
 
 ## Strategic Principles
 
-### 1. Gateway chains (highest priority)
-Certain cities are gateways to entire chains of uncontested territory. Entering a gateway city is only valuable if you **follow through the whole chain**. Examples:
-- **LITTLE_ROCK → HOUSTON → DALLAS → EL_PASO** (Texas + Central connection)
-- **OKLAHOMA_CITY → DALLAS → EL_PASO → ALBUQUERQUE → PHOENIX → DENVER** (Texas + Grand Canyon)
-- **INDIANAPOLIS → ST_LOUIS → KANSAS_CITY → DODGE_CITY → OGALLALA** (Central corridor)
-If you entered a gateway city last turn, extend further along the chain this turn — do not pivot back to contested eastern cities.
+### 1. Extend to enter, then INCREASE to score — never enter-and-abandon
+Extending gives you a branch and a foothold. But without increasing to majority, you earn zero from that city. After extending into a priority city, plan to increase there repeatedly until you hold majority. One branch in a 7-slot city (Chicago) contributes nothing until you have 4. One branch in an 8-slot city (New York) earns zero until you have 5.
 
-### 2. Uncontested western expansion wins games
-The Grand Canyon region (10/8/5 bonuses) is almost always contested late. Entering it early from the south (via El Paso or Albuquerque) is far more valuable than increasing in an already-safe eastern city. If your opponent has not entered the West, claim it immediately.
+### 2. Closing regions requires scoring their large cities
+To close a region, you must score ALL its large cities by achieving majority. Simply entering every city in a region is NOT sufficient. Grand Canyon will never close if Phoenix (5 slots), Albuquerque (4 slots), and Denver (4 slots) never achieve majority. You must keep increasing in those cities until someone holds majority in each.
 
-### 3. Don't cede GREAT_LAKES for free
-GREAT_LAKES (Indianapolis, Chicago, Detroit, Minneapolis) is worth 6/4/2 in region bonuses, plus Chicago (~7) and Detroit (~4) give the largest city-entry bonuses in the East. If your opponent holds Indianapolis or Chicago with no contest, they will win both the region and massive city bonuses. Enter at least one GREAT_LAKES city early to deny them the free sweep — even a single branch in Chicago is worth entering before the opponent claims the full +7 city bonus.
+### 3. Gateway chains (high priority)
+Certain cities are gateways to chains of uncontested territory. Entering a gateway is only valuable if you **follow through the whole chain** with increases to eventually score each city:
+- **EL_PASO → ALBUQUERQUE → PHOENIX → DENVER** (Grand Canyon)
+- **LITTLE_ROCK → HOUSTON → DALLAS → OKLAHOMA_CITY** (Texas + Central)
+- **INDIANAPOLIS → ST_LOUIS → KANSAS_CITY → DODGE_CITY → OGALLALA** (Central)
 
-### 4. First-mover advantage
-The first player to enter a city owns it strategically — and earns the full city-entry bonus. In odd-slot cities a single branch beats zero. Entering new cities beats increasing in cities you already lead.
+### 4. Commit to leading regions — increase until scored
+When you hold the most branches in a region, your priority is to keep increasing in its large cities until you achieve majority and score them. Every turn you delay is a turn the opponent can catch up. The Region Majority Analysis in the prompt shows exactly how many increases you need.
 
-### 5. Never waste increases on safe cities
-Do not increase in a city or region where your opponent cannot realistically challenge you within 2–3 turns. Use those actions to extend into new territory.
+### 5. Contest cities where opponent is building majority
+If your opponent has 3/5 branches in Dallas (needs 3 for majority), they will score it next turn unless you increase there too. Increasing in a contested city forces them to spend more increases or concede the city to you. Watch the majority thresholds.
 
-### 6. Cut losses on unwinnable positions
-If your opponent leads a city or region by 2+ branches and few slots remain, **do not keep investing there**. The moves are better spent elsewhere. Specifically: if you trail in a city by 2+ and cannot realistically reach majority, take the 3rd-place region bonus and redirect your actions to open territory.
+### 6. Don't enter-and-abandon key cities
+If you extend into Chicago (7 slots, majority=4) without planning 3+ follow-up increases, you are wasting your extension. You will pay the extension cost, your opponent will increase past you, and they will collect the 7-point Chicago scoring bonus. Either commit to a city with increases, or don't enter it.
 
-### 7. Don't over-secure already-dominant positions
-If your branch count in a region **exceeds your opponent's by 4 or more**, your 1st-place finish is already mathematically locked — no opponent increase can catch you. Do not waste further increases there. Redirect those actions to extend into new cities or contest regions that are still undecided. Repeatedly increasing in a region you lead 7–1 is the single biggest waste of turns in the game.
+### 7. Cut losses on cities where opponent leads significantly
+If your opponent holds 3+ branches in a 5-slot city (majority imminent) and you have 1, do not keep increasing there. Accept that city is lost and redirect your increases to cities you can still win.
 
-### 8. Always read the current board state before deciding
-**Before choosing a move, count your branches and your opponent's branches in each region from the board state provided above.** Do not rely on assumptions from earlier in the game — regions may have already closed, leads may have shifted, and cities you assumed were safe may now be contested. Base your reasoning strictly on the numbers shown.
+### 8. Don't over-secure already-scored cities
+Once a city is scored (marked as closed), no more branches can be added and no more influence is available from it. Never try to increase in a closed city.
 
-### 9. Never close a region where your opponent leads
-If you trail in branches in a region, **do not extend into the last open city of that region**. Closing the region immediately awards your opponent 1st place (their largest bonus), while you receive only the 3rd place consolation. Leave trailing regions open — this denies the opponent their bonus until they spend their own actions to close it, and keeps you earning income from the cities you do hold. The Region Closure Analysis will flag these situations as ⚠️ DO NOT CLOSE.
+### 9. Never close a region where your opponent leads in branches
+If you trail in branch count in a region, do not extend into the last un-entered town or increase to trigger the last city's scoring — that closes the region and pays your opponent their 1st place bonus while you collect only 3rd. Leave trailing regions open.
 
-### 10. Endgame scoring (last 8 rounds)
-When most regions are nearly closed, shift to maximising increases in regions where you lead. Income converts to influence at game end — every branch in a won region is worth more than a branch in a lost one.
+### 10. Prioritize closing your leading regions fast
+Every turn a region stays unclosed is wasted. When you lead a region, use your increases to score its large cities and close it ASAP. Don't pivot to new extensions while your profitable leading regions sit unclosed.
 
-### 11. Contest dangerous opponent leads
-If your opponent leads a high-value region (Grand Canyon, Florida) by 2+ branches, contest it immediately before it becomes unassailable.
+### 11. GREAT_LAKES requires active contesting
+Chicago (7 pts) and Detroit (4 pts) are the largest city bonuses in the east. If your opponent is building to majority in Chicago, you must counter-increase or they will claim 7 points and win the region. Never let your opponent build to 4/7 Chicago unchallenged.
 
-### 12. Kansas City / St Louis trap
-These cities appear central and high-value, but over-investing in them (multiple increases early) while the opponent sweeps Texas and the Southwest is a losing trade. Establish a presence, then move west.
+### 12. Endgame: finish scoring cities you are leading
+In the last turns, focus increases on any city where you are one step from majority. These are guaranteed points before the game ends.
+
+### 13. Always read the current board state before deciding
+Check the Region Majority Analysis in your prompt. It shows exactly which cities are blocking each region from closing and how many increases each player needs. Never decide based on assumptions from earlier turns.
+
+### 14. Kansas City / St Louis trap
+Over-investing in these cities while the opponent sweeps Texas and the Southwest is a losing trade. Establish a presence, then move west.
 
 ## Output Format
 
