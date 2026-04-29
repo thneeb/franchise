@@ -80,22 +80,31 @@ If your opponent holds 3+ branches in a 5-slot city (majority imminent) and you 
 ### 8. Don't over-secure already-scored cities
 Once a city is scored (marked as closed), no more branches can be added and no more influence is available from it. Never try to increase in a closed city.
 
-### 9. Never close a region where your opponent leads in branches
-If you trail in branch count in a region, do not extend into the last un-entered town or increase to trigger the last city's scoring — that closes the region and pays your opponent their 1st place bonus while you collect only 3rd. Leave trailing regions open.
+### 9. CRITICAL — Entering a city NEVER closes a region by itself
+**Extending into a city does NOT close its region.** A region closes only when ALL its large cities have been SCORED (one player achieves majority in EACH of them). You can freely extend into any city in a trailing region to build presence. The ⚠️ DO NOT CLOSE verdict means: do NOT be the action that SCORES the very last unscored city in a region where you trail — which would trigger region closure and pay the opponent 1st place. It does NOT mean avoid the region. It does NOT mean stop extending.
 
-### 10. Prioritize closing your leading regions fast
+### 10. CRITICAL — SKIP is almost always wrong
+Skipping earns you nothing: no city scoring, no income advancement, no board presence. Every skip gives your opponent a free action while you stagnate. **SKIP only if you literally cannot afford any move AND have zero money.** Whenever you think "I should skip," ask instead: "Can I extend into ANY city in the east or a contested region to build future majority?" Almost always the answer is yes. Skipping 3+ times in a row is a losing strategy — you hand the opponent the entire east board uncontested.
+
+### 11. After closing your leading regions, race east immediately
+When you close a region (e.g. Grand Canyon, Texas), do not stop. Turn your attention east immediately. Enter CHICAGO, DETROIT, INDIANAPOLIS, PITTSBURGH, NEW_YORK, WASHINGTON — one city per turn. Even a single branch in each city starts contesting those city bonuses and region scoring. Your opponent is building uncontested majorities every turn you skip. Extend, extend, extend.
+
+### 12. Never close a region where your opponent leads in branches
+If you trail in branch count in a region, do not increase to score the LAST unscored city (which would trigger region closure and pay the opponent 1st place while you collect only 3rd). But you CAN still enter new cities in that region and you CAN increase in non-last cities. Only avoid being the one to trigger the final closure.
+
+### 13. Prioritize closing your leading regions fast
 Every turn a region stays unclosed is wasted. When you lead a region, use your increases to score its large cities and close it ASAP. Don't pivot to new extensions while your profitable leading regions sit unclosed.
 
-### 11. GREAT_LAKES requires active contesting
-Chicago (7 pts) and Detroit (4 pts) are the largest city bonuses in the east. If your opponent is building to majority in Chicago, you must counter-increase or they will claim 7 points and win the region. Never let your opponent build to 4/7 Chicago unchallenged.
+### 14. GREAT_LAKES and eastern regions need early contesting
+Chicago (7 pts) and Detroit (4 pts) are the largest city bonuses in the east. If your opponent is building toward majority in Chicago, extend and counter-increase or they will claim 7 uncontested points and win the region. Never let your opponent build to majority in any large city without at least entering it first.
 
-### 12. Endgame: finish scoring cities you are leading
+### 15. Endgame: finish scoring cities you are leading
 In the last turns, focus increases on any city where you are one step from majority. These are guaranteed points before the game ends.
 
-### 13. Always read the current board state before deciding
+### 16. Always read the current board state before deciding
 Check the Region Majority Analysis in your prompt. It shows exactly which cities are blocking each region from closing and how many increases each player needs. Never decide based on assumptions from earlier turns.
 
-### 14. Kansas City / St Louis trap
+### 17. Kansas City / St Louis trap
 Over-investing in these cities while the opponent sweeps Texas and the Southwest is a losing trade. Establish a presence, then move west.
 
 ## Output Format

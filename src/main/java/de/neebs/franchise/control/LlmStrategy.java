@@ -152,9 +152,9 @@ public class LlmStrategy implements GameStrategy {
             }
 
             String verdict;
-            if (yourTotal > oppTotal) verdict = "✅ CLOSE NOW — you lead; keep increasing to score cities";
-            else if (oppTotal > yourTotal) verdict = "⚠️ DO NOT CLOSE — you trail; don't trigger opponent's 1st bonus";
-            else verdict = "CONTEST — tied; first to score cities wins";
+            if (yourTotal > oppTotal) verdict = "✅ CLOSE NOW — you lead; keep increasing to achieve majority in each city";
+            else if (oppTotal > yourTotal) verdict = "⚠️ DO NOT TRIGGER CLOSURE — you trail; do NOT score the last unscored city (that closes the region). You CAN still extend into new cities here.";
+            else verdict = "CONTEST — tied; race to majority in each city, whoever scores first wins";
 
             sb.append(String.format("  %s (you:%d opp:%d) → %s\n",
                     region.getName(), yourTotal, oppTotal, verdict));
@@ -202,8 +202,19 @@ public class LlmStrategy implements GameStrategy {
 
         // Possible moves
         sb.append("**Your Possible Moves** (choose one by index, 0-based):\n");
+        boolean hasSkip = false;
         for (int i = 0; i < candidates.size(); i++) {
-            sb.append(String.format("  %d: %s\n", i, formatMove(candidates.get(i))));
+            DrawRecord m = candidates.get(i);
+            boolean isSkip = m.getExtension().isEmpty() && m.getIncrease().isEmpty();
+            if (isSkip) hasSkip = true;
+            sb.append(String.format("  %d: %s\n", i, formatMove(m)));
+        }
+        if (hasSkip) {
+            sb.append("\n⚠️ WARNING: The move list contains SKIP. SKIP is almost always the worst choice.\n");
+            sb.append("  SKIP earns you nothing while your opponent acts freely. Only pick SKIP if you have\n");
+            sb.append("  literally zero money AND zero income AND no other option. If ANY extension or\n");
+            sb.append("  increase is available, prefer it over SKIP — even entering a distant city is better\n");
+            sb.append("  than giving your opponent a free turn.\n");
         }
         sb.append('\n');
         sb.append("Respond with JSON only: {\"moveIndex\": <int>, \"reason\": \"<explanation>\"}\n");
