@@ -80,6 +80,7 @@ public class LlmStrategy implements GameStrategy {
                 .filter(p -> p != player).findFirst().orElse(null);
         Score myScore = state.getScores().get(player);
         Score oppScore = opponent != null ? state.getScores().get(opponent) : null;
+        Map<City, Integer> extensionCosts = franchiseService.computeExpansionCosts(state);
 
         StringBuilder sb = new StringBuilder();
         sb.append("## Current Game State\n");
@@ -207,7 +208,7 @@ public class LlmStrategy implements GameStrategy {
             DrawRecord m = candidates.get(i);
             boolean isSkip = m.getExtension().isEmpty() && m.getIncrease().isEmpty();
             if (isSkip) hasSkip = true;
-            sb.append(String.format("  %d: %s\n", i, formatMove(m)));
+            sb.append(String.format("  %d: %s\n", i, formatMove(m, extensionCosts, state, player)));
         }
         if (hasSkip) {
             sb.append("\n⚠️ WARNING: The move list contains SKIP. SKIP is almost always the worst choice.\n");
@@ -235,23 +236,41 @@ public class LlmStrategy implements GameStrategy {
         return new int[]{mine, opp};
     }
 
-    private static String formatMove(DrawRecord move) {
+    private static String formatMove(DrawRecord move, Map<City, Integer> costs,
+                                     GameState state, PlayerColor player) {
         StringBuilder sb = new StringBuilder();
         if (!move.getExtension().isEmpty()) {
             sb.append("EXT(");
-            sb.append(move.getExtension().stream().map(City::name).collect(Collectors.joining(", ")));
+            sb.append(move.getExtension().stream()
+                    .map(c -> {
+                        int cost = costs.getOrDefault(c, 0);
+                        String note = cost == 0 ? "FREE" : "$" + cost;
+                        return c.name() + "(" + note + ")";
+                    })
+                    .collect(Collectors.joining(", ")));
             sb.append(')');
         }
         if (!move.getIncrease().isEmpty()) {
-            if (sb.length() > 0) sb.append(" + ");
+            if (!sb.isEmpty()) sb.append(" + ");
             sb.append("INC(");
-            sb.append(move.getIncrease().stream().map(City::name).collect(Collectors.joining(", ")));
+            sb.append(move.getIncrease().stream()
+                    .map(c -> {
+                        PlayerColor[] slots = state.getCityBranches().get(c);
+                        if (slots == null) return c.name();
+                        int myB = 0;
+                        for (PlayerColor s : slots) if (s == player) myB++;
+                        int total = c.getSize();
+                        int needed = total / 2 + 1;
+                        String tag = (myB + 1 >= needed) ? "→MAJORITY!" : (myB + 1) + "/" + total;
+                        return c.name() + "(" + tag + ")";
+                    })
+                    .collect(Collectors.joining(", ")));
             sb.append(')');
         }
         if (move.getBonusTileUsage() != null) {
             sb.append(" [BONUS:").append(move.getBonusTileUsage()).append(']');
         }
-        if (sb.length() == 0) sb.append("SKIP");
+        if (sb.isEmpty()) sb.append("SKIP");
         return sb.toString();
     }
 
