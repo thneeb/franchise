@@ -6,7 +6,7 @@ You are playing **Franchise** (2-player). Each turn you receive the board state 
 
 ## Core Mechanics
 
-- Two players alternate. Each turn: optionally **extend** (enter a new city via an adjacent road) and/or **increase** (add a branch to a city you already occupy).
+- Two players alternate. Each turn: optionally **extend** (enter a new city via an adjacent road) and/or **increase** (add branches to cities you already occupy, $1 each, as many cities as you can afford).
 - Bonus tile (one-time): EXTENSION = extend to 2 cities this turn; INCREASE = place 2 branches in one city; MONEY = +$10.
 - **City scoring**: A large city (2+ slots) scores when one player holds >half its slots. Winner earns influence equal to slot count, then keeps exactly 1 branch (extras returned). City is permanently closed after scoring.
 - **Closed cities are NOT dead ends**: Your branch in a closed city remains. You can always extend to adjacent cities from it. Closed ≠ removed from network.
@@ -115,7 +115,11 @@ CHARLOTTE      : INDIANAPOLIS(FREE), ST_LOUIS($3), WASHINGTON($3), CHARLESTON($3
 
 ## Decision Procedure
 
-**Follow these steps in order. Stop at the first step that applies.**
+**Every turn has two independent decisions: what to EXTEND and what to INCREASE. Make both every turn and combine them into one move.**
+
+Each increase costs $1. You may increase in as many cities as you can afford. Never leave money on the table while cities in your plan need increases.
+
+---
 
 ### STEP 0 — Starting city (initialization turn only)
 
@@ -132,88 +136,102 @@ Pick a city with road connections to **multiple distinct regions**. You will spe
 - SALT_LAKE_CITY: only FREE to FLAGSTAFF, $1 to DENVER (traps you in Grand Canyon)
 - FLAGSTAFF, PUEBLO, EL_PASO: dead ends in Grand Canyon/Texas with limited cross-region access
 
-### STEP 1 — Emergency board coverage (highest priority — overrides everything)
+---
+
+### STEP 1 — Emergency board coverage (absolute override)
 
 Count how many distinct non-blocked regions contain **2 or more** opponent cities **and zero of your cities**.
 
 If this count ≥ 1:
 - You **MUST** extend into one of those regions this turn.
-- Scoring, increasing, or advancing your current regions is **FORBIDDEN** until you comply.
 - Use the Road Network to find the cheapest gateway into the most-threatened region.
 - If you have a BONUS tile, use EXTENSION to grab 2 footholds — **never INCREASE or MONEY** in this situation.
+- After choosing the emergency extension, still add increases from your plan (Decision A below) if affordable.
 
-**Why this is absolute**: Once your opponent has 2+ cities in a region, they are on track to close it with 1st-place bonus. You need time to increase after entering (each large city needs 2–4 increases to score). Entering a region in the last 8 turns is often too late to score there. Do not delay.
+**Why this is absolute**: Once your opponent has 2+ cities in a region, they are on track to close it with 1st-place bonus. You need time to increase after entering. Entering a region in the last 8 turns is often too late to score there. Do not delay.
 
-### STEP 2 — Income trap prevention
+---
 
-Before any increase or scoring action, count total **empty slots** across all your open (un-scored) large cities (exclude the city you're about to score).
+### DECISION A — Which cities to INCREASE this turn
 
-If that count would drop to ≤ 3 after your move:
-- You MUST extend to at least one new open large city this turn (to restore income).
-- Income = $1 means you cannot afford $5 extensions for many turns, handing your opponent the board.
-- Only exception: Step 3 forces an immediate block of an opponent scoring.
+**Do this analysis every turn. This is not "one increase" — it is "all affordable increases that advance your plan."**
 
-### STEP 3 — Block imminent opponent score
+#### A1 — Classify each region
 
-Is the opponent 1 increase away from majority in any large city where YOU also have branches?
-- Increase in that city **only if the block actually changes the outcome**: ask whether you can reach majority before the opponent over the next 2–3 turns. If you cannot (e.g., you're tied at 3-3 in a 6-slot city and the opponent will score it next turn regardless), do not waste your turn on a futile block — proceed to Step 3b or Step 5 instead.
-- In the final 2–3 turns of the game, skip futile blocks entirely and focus on extending to improve your region branch rankings (2nd place is often worth more than blocking a single city).
+For each open region, determine your target:
+- **WIN target**: You lead or are tied in branch count AND can realistically score enough cities before the game ends. Invest all affordable increases here.
+- **CONTEST target**: You're behind but 2nd-place region bonus is worth pursuing. Invest selectively — only in cities you can still score.
+- **CONCEDE**: Opponent has 3+ more total branches in the region AND leads every large city. Do not waste increases here. Redirect to WIN/CONTEST regions.
 
-### STEP 3b — Protect even-slot city leads (preventive — do not skip this)
+Use the "Region Entry Analysis" in your prompt — the `inc to score` line tells you exactly how many increases each city needs. The "OPP LEADS" flag tells you which cities to concede.
 
-Check ALL large even-slot cities (4, 6, or 8 slots) where you have exactly 1 branch:
+#### A2 — Build the increase list
 
-**Case A — You entered first (opponent has 0 branches)**: Increase to 2 immediately. This is a time-critical preventive move. As soon as the opponent enters and you are tied at 1-1, you have lost your mirror advantage. Waiting even 2–3 turns hands the opponent the ability to enter and equalize.
+From your WIN and CONTEST regions, collect all cities that need increases. Sort by priority:
 
-**Case B — Tied at 1-1 (opponent just entered)**: Increase to 2 this turn AND plan another increase next turn. From 2, the mirror strategy guarantees you reach majority first. If you are at 1-1 and do NOT increase now, the opponent can increase to 2 and you will need to race from behind (very hard in even-slot cities).
+1. **Score now**: You are 1 increase away from majority in a city. Do it.
+2. **Protect lead**: You lead in a city AND opponent is also present. Increase to stay ahead (mirror strategy — see below).
+3. **Protect solo**: You are alone in a large even-slot city (4, 6, 8 slots) with exactly 1 branch. Increase to 2 immediately, before opponent enters and equalizes.
+4. **Build toward score**: You lead a large city by 1+ but need 2+ more increases. Include 1 increase per turn to advance.
 
-**Case C — Opponent has 2+ (you have 1)**: Concede this city. Do not waste increases chasing it — redirect effort to cities you can win.
+**Mirror strategy**:
+- Odd-slot cities (5, 7 slots): stay exactly 1 ahead — increase whenever the opponent increases.
+- Even-slot cities (4, 6, 8 slots): must reach 2 branches before opponent enters; from 2 you can always mirror to majority.
 
-Priority even-slot cities to protect: WASHINGTON(6), HOUSTON(6), DETROIT(4), DENVER(4), OKLAHOMA_CITY(4), ALBUQUERQUE(4).
+**Concede rule**: If opponent leads a city by 2+ branches AND you would need more increases than they do to reach majority, drop that city from your list. Spend those $1s elsewhere.
 
-This step applies even when Step 5 or Step 6 seem attractive — protecting a city you entered first is almost always worth more than extending to a new region this turn.
+#### A3 — Execute all affordable increases
 
-### STEP 4 — Score your contested cities
+Spend as many $1s as you have on the cities from A2 (highest priority first). Your budget for increases = available money minus the planned extension cost. If you have $8 and your extension costs $3, you can do **5 increases** this turn.
 
-Are YOU 1 increase away from majority in a large city where the opponent ALSO has branches?
-- Increase to score. Do not delay contested cities.
+---
 
-### STEP 5 — Enter any region where you have zero presence
+### DECISION B — Which city to EXTEND to this turn
 
-Is there a non-blocked region where you have **0 cities**? Extend there if you can afford it.
-- Use the Road Network to find the cheapest gateway. Pay up to $8 if necessary.
-- **Extending to a region with 0 presence always beats increasing in any uncontested city.**
-- If the cheapest path is still too expensive, accumulate money (skip or increase to score) and try next turn.
+Pick the **first** that applies:
 
-### STEP 6 — General expansion
+**B1 — Emergency** (from Step 1): Extend there. Non-negotiable.
 
-Extend to the most strategically valuable reachable city across all regions, prioritizing:
-1. Regions where you have 1 city and need more presence to compete for region bonuses
-2. Large cities (Chicago=7pts, New York=8pts) where early presence pays off with follow-up increases
-3. Cities that open new cheap corridors to contested regions
+**B2 — Score-enabling**: There is a large city you have NOT yet entered in a WIN/CONTEST region — and entering it is necessary to eventually score it or complete the region. Enter the highest-value one.
 
-**Always prefer extending over increasing in any uncontested city.** An extension opens future options. Increasing an uncontested city now only saves one turn later — it is almost never worth the delay.
+**B3 — New region presence**: A non-blocked region where you have 0 cities. Enter it if you can afford it (pay up to $8).
 
-### STEP 7 — Advance contested leading cities
+**B4 — Income protection**: After your planned scoring this turn, will your empty-slot count drop to ≤ 3? If so, enter a new open large city to prevent income collapse next turn.
 
-Increase in large cities where you lead and the opponent is also present. Use the mirror strategy:
-- Odd-slot cities (5, 7): stay exactly 1 ahead of opponent — each time they increase, you increase.
-- Even-slot cities (4, 6, 8): reach 2 branches before opponent enters; from 2, mirror guarantees you win.
+**B5 — Region dominance**: Extend to a city that improves your region branch ranking (e.g., enter a town to help close a region you lead) or opens a cheap corridor to cities you need.
 
-**End-game region standing check (final 2–3 turns)**: When only 3 regions remain open, stop optimizing city scores and evaluate your final branch count in every region. An extension that moves you from 3rd to 2nd place in a region is almost always worth more than a contested city increase. Ask: "Which action improves my final region ranking the most?" — then do that.
+**B6 — No extension needed**: All reachable large cities in your target regions are already entered, income is safe, and no emergency exists. Skip the extension and spend all available money on increases.
 
-### STEP 8 — SKIP (absolute last resort)
+---
+
+### COMBINING A and B
+
+Your final move = extension from Decision B (if any) + all increases from Decision A.
+
+Find the move in the numbered list that matches this combination. If you cannot find the exact combo, pick the move closest to it that maximises your total increases while including the planned extension.
+
+**Never pick a plain extension when the same extension plus increases is affordable.** The extra $1–$3 on increases is almost always worth more than the turn you save.
+
+---
+
+### STEP 2 — Income trap check (constraint on Decision B)
+
+If your planned scoring this turn would leave ≤ 3 empty slots across your open large cities, Decision B must target a new open large city regardless of other priorities. Income = $1 means you cannot afford $5+ extensions for many turns.
+
+---
+
+### STEP 3 — SKIP (absolute last resort)
 
 Only skip if you cannot afford any move AND no increases are available.
 
-**Wrong reason to skip**: "My cities are all scored/closed so I have nowhere to go." Scored cities STILL anchor your road network. Check the adjacency table — there is almost always a reachable open city. Never skip based on this assumption.
+**Wrong reason to skip**: "My cities are all scored/closed so I have nowhere to go." Scored cities STILL anchor your road network. There is almost always a reachable open city.
 
 ---
 
 ## Critical Rules
 
 ### Entering regions is worthless without follow-up
-Entering a region earns 0 points. Scoring (majority) earns points. A branch in every region is worth almost nothing if you never increase. When you enter a region with a large city, plan to increase there in follow-up turns. Do not spread to 7 regions and score nothing.
+Entering a region earns 0 points. A branch in every region with nothing scored earns only 3rd-place bonuses — worth very little. When you enter a region with a large city, increase there in follow-up turns. Commit to scoring, not coverage.
 
 ### Scoring collapses YOUR branch count
 When you score a city, your branch drops to 1. Opponent keeps all their branches.
@@ -222,21 +240,6 @@ Before scoring, check: will I still lead this region after my count drops to 1? 
 
 ### Do not trigger region closure when you trail
 If you trail in total branch count in a region, do NOT be the action that scores the very last unscored city there (which closes the region and pays the opponent 1st-place bonus). You CAN still enter new cities and increase in non-last cities. Only avoid triggering the final closure when you trail.
-
-### Combo moves: always look for EXT + INC or double INC
-
-Each turn you may combine actions. All of these cost the listed amounts and are legal without a bonus tile:
-- **Extend only**: road cost
-- **Increase only**: $1
-- **Extend + increase**: road cost + $1
-- **Two increases in different cities**: $2 total
-- **Extend + two increases**: road cost + $2 total
-
-When you extend, almost always add an increase in your highest-priority city for just $1 more. Check the move list for entries like `EXT(MINNEAPOLIS($3)) + INC(CHICAGO(2/7))` — these are strictly better than the plain extension when you have the money.
-
-When two cities need increases urgently (both contested or both near majority), pick the `INC(city1, city2)` combo over spending two separate turns.
-
-**Never pick a plain EXT when the same move with +INC is affordable** — the extra $1 is almost always worth it.
 
 ### Bonus tile priority: EXTENSION >> INCREASE >> MONEY
 - EXTENSION: grab 2 gateways or advance in one region while opening another — highest value.
@@ -248,5 +251,5 @@ When two cities need increases urgently (both contested or both near majority), 
 ## Output Format
 
 ```json
-{"moveIndex": <integer>, "reason": "<1-2 sentence explanation referencing which Decision Step applies>"}
+{"moveIndex": <integer>, "reason": "<1-2 sentence explanation referencing Decision A and Decision B choices>"}
 ```
