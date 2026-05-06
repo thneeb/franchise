@@ -36,14 +36,17 @@ public class LlmStrategy implements GameStrategy {
     private static final String SYSTEM_PROMPT_PATH = "llm/system-prompt.md";
 
     private final FranchiseService franchiseService;
+    private final RegionClosureService regionClosureService;
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
     private final String systemPrompt;
 
     public LlmStrategy(@Lazy FranchiseService franchiseService,
+                       RegionClosureService regionClosureService,
                        LlmClient llmClient,
                        ObjectMapper objectMapper) {
         this.franchiseService = franchiseService;
+        this.regionClosureService = regionClosureService;
         this.llmClient = llmClient;
         this.objectMapper = objectMapper;
         this.systemPrompt = loadSystemPrompt();
@@ -131,72 +134,70 @@ public class LlmStrategy implements GameStrategy {
         }
         sb.append('\n');
 
-        // Region majority analysis — shows what's actually needed to close each region
-        sb.append("**Region Majority Analysis** (regions close only when ALL large cities are SCORED via majority):\n");
+        // Region closure analysis — pre-computed by RegionClosureService.
+        // NOTE: minExtendsToClose counts extends to ENTER all unoccupied cities (by anyone).
+        // It does NOT count increases needed to score large cities — those are still required after.
+        List<RegionClosureService.RegionClosureInfo> closureAnalysis = regionClosureService.analyze(state);
+        sb.append("**Region Entry Analysis** (extends to enter all cities + closing path):\n");
+        sb.append("  Note: 'all cities entered' means every city has ≥1 branch (by either player).\n");
+        sb.append("  A region still closes only when all large cities are SCORED (majority) and all towns entered.\n");
+
+        // Closed regions
         for (Region region : Region.values()) {
             if (state.getInactiveRegions().contains(region)) continue;
+            if (!state.getClosedRegions().contains(region)) continue;
+            int[] totals = branchTotals(region, state, player, opponent);
+            String winner = totals[0] > totals[1] ? "YOU 1st" : totals[1] > totals[0] ? "OPP 1st" : "TIED";
+            sb.append(String.format("  %s [CLOSED — %s]\n", region.getName(), winner));
+        }
 
-            int yourTotal = 0, oppTotal = 0;
-            for (City c : region.getCities()) {
-                PlayerColor[] slots = state.getCityBranches().get(c);
-                if (slots == null) continue;
-                for (PlayerColor s : slots) {
-                    if (s == player) yourTotal++;
-                    else if (s == opponent) oppTotal++;
-                }
+        // Open regions
+        for (RegionClosureService.RegionClosureInfo info : closureAnalysis) {
+            Region region = info.region();
+            sb.append(String.format("  %s [1st=%d 2nd=%d 3rd=%d]",
+                    region.getName(), region.getFirst(), region.getSecond(), region.getThird()));
+            if (!info.openCities().isEmpty()) {
+                sb.append(" — unentered cities: ");
+                sb.append(info.openCities().stream().map(City::name).collect(Collectors.joining(", ")));
+            } else {
+                sb.append(" — all cities entered (still need scoring to close)");
             }
+            sb.append('\n');
 
-            if (state.getClosedRegions().contains(region)) {
-                String winner = yourTotal > oppTotal ? "YOU 1st" : oppTotal > yourTotal ? "OPP 1st" : "TIED";
-                sb.append(String.format("  %s [CLOSED — %s]\n", region.getName(), winner));
-                continue;
-            }
+            RegionClosureService.ClosurePlayerInfo myInfo = info.byPlayer().get(player);
+            RegionClosureService.ClosurePlayerInfo oppInfo = opponent != null ? info.byPlayer().get(opponent) : null;
 
-            String verdict;
-            if (yourTotal > oppTotal) verdict = "✅ CLOSE NOW — you lead; keep increasing to achieve majority in each city";
-            else if (oppTotal > yourTotal) verdict = "⚠️ DO NOT TRIGGER CLOSURE — you trail; do NOT score the last unscored city (that closes the region). You CAN still extend into new cities here.";
-            else verdict = "CONTEST — tied; race to majority in each city, whoever scores first wins";
-
-            sb.append(String.format("  %s (you:%d opp:%d) → %s\n",
-                    region.getName(), yourTotal, oppTotal, verdict));
-
-            for (City city : region.getCities().stream()
-                    .sorted(java.util.Comparator.comparing(Enum::name))
-                    .collect(Collectors.toList())) {
-
-                PlayerColor[] slots = state.getCityBranches().get(city);
-                if (city.getSize() == 1) {
-                    boolean entered = slots != null && Arrays.stream(slots).anyMatch(s -> s != null);
-                    if (!entered) {
-                        sb.append(String.format("    %s [town]: NOT ENTERED — need 1 extend\n", city.name()));
-                    }
+            if (myInfo != null) {
+                String entryStr;
+                if (myInfo.minExtendsToClose() == 0) {
+                    entryStr = "no more extends needed";
                 } else {
-                    if (state.getClosedCities().contains(city)) {
-                        sb.append(String.format("    %s: SCORED ✓\n", city.name()));
-                    } else {
-                        int total = city.getSize();
-                        int majorityNeeded = total / 2 + 1;
-                        int myB = 0, oppB = 0;
-                        if (slots != null) {
-                            for (PlayerColor s : slots) {
-                                if (s == player) myB++;
-                                else if (s == opponent) oppB++;
-                            }
-                        }
-                        String myStr = myB == 0
-                                ? String.format("YOU not here (need 1 ext + %d inc)", majorityNeeded)
-                                : myB * 2 > total
-                                        ? "YOU have majority already — score imminent"
-                                        : String.format("YOU %d/%d → need %d more increases", myB, total, majorityNeeded - myB);
-                        String oppStr = oppB == 0
-                                ? "OPP not here"
-                                : oppB * 2 > total
-                                        ? "OPP has majority — will score next!"
-                                        : String.format("OPP %d/%d → needs %d more", oppB, total, majorityNeeded - oppB);
-                        sb.append(String.format("    %s [%d slots, majority=%d+, bonus=%dpts]: %s | %s\n",
-                                city.name(), total, majorityNeeded, total, myStr, oppStr));
-                    }
+                    String path = myInfo.closingPath().stream().map(City::name).collect(Collectors.joining("→"));
+                    entryStr = myInfo.minExtendsToClose() + " extend" + (myInfo.minExtendsToClose() == 1 ? "" : "s")
+                            + " via " + path;
                 }
+                boolean canEnterSoon = myInfo.minExtendsToClose() > 0 && myInfo.canCloseNextTurn();
+                String myIncStr = buildIncreasesSummary(region, player, state);
+                sb.append(String.format("    YOU: %d br%s | %s%s | %s\n",
+                        myInfo.branches(), myInfo.leads() ? " LEADS" : "",
+                        entryStr, canEnterSoon ? " ⚡" : "",
+                        myIncStr));
+            }
+            if (oppInfo != null) {
+                String entryStr;
+                if (oppInfo.minExtendsToClose() == 0) {
+                    entryStr = "no more extends needed";
+                } else {
+                    String path = oppInfo.closingPath().stream().map(City::name).collect(Collectors.joining("→"));
+                    entryStr = oppInfo.minExtendsToClose() + " extend" + (oppInfo.minExtendsToClose() == 1 ? "" : "s")
+                            + " via " + path;
+                }
+                boolean canEnterSoon = oppInfo.minExtendsToClose() > 0 && oppInfo.canCloseNextTurn();
+                String oppIncStr = buildIncreasesSummary(region, opponent, state);
+                sb.append(String.format("    OPP: %d br%s | %s%s | %s\n",
+                        oppInfo.branches(), oppInfo.leads() ? " LEADS" : "",
+                        entryStr, canEnterSoon ? " ⚡" : "",
+                        oppIncStr));
             }
         }
         sb.append('\n');
@@ -221,6 +222,28 @@ public class LlmStrategy implements GameStrategy {
         sb.append("Respond with JSON only: {\"moveIndex\": <int>, \"reason\": \"<explanation>\"}\n");
 
         return sb.toString();
+    }
+
+    private String buildIncreasesSummary(Region region, PlayerColor player, GameState state) {
+        int[] totalRef = {0};
+        List<String> parts = region.getCities().stream()
+                .filter(city -> city.getSize() > 1)
+                .filter(city -> !state.getClosedCities().contains(city))
+                .sorted(java.util.Comparator.comparing(Enum::name))
+                .map(city -> {
+                    int majority = city.getSize() / 2 + 1;
+                    PlayerColor[] slots = state.getCityBranches().get(city);
+                    int myBranches = slots == null ? 0 :
+                            (int) Arrays.stream(slots).filter(s -> s == player).count();
+                    int needed = myBranches == 0 ? majority : Math.max(0, majority - myBranches);
+                    if (needed == 0) return null;
+                    totalRef[0] += needed;
+                    return city.name() + "(+" + needed + (myBranches == 0 ? ",no branch" : "") + ")";
+                })
+                .filter(s -> s != null)
+                .collect(Collectors.toList());
+        if (parts.isEmpty()) return "all large cities scored";
+        return "inc to score: " + String.join(", ", parts) + " = " + totalRef[0] + " total";
     }
 
     private int[] branchTotals(Region region, GameState state, PlayerColor player, PlayerColor opponent) {

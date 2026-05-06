@@ -84,6 +84,11 @@ public class FranchiseService {
         return getPossibleDrawsFromState(state);
     }
 
+    public DrawCostSummary computeDrawCost(GameState state, PlayerColor player, DrawRecord draw) {
+        if (state.isInitialization()) return buildInitDrawCostSummary();
+        return validateAndCalculateCosts(state, player, draw);
+    }
+
     // Core move-generation logic operating directly on a GameState (no HashMap lookup).
     private List<DrawRecord> getPossibleDrawsFromState(GameState state) {
         if (state.isEnd()) return List.of();
@@ -121,25 +126,21 @@ public class FranchiseService {
         // Skip (always available)
         draws.add(draw(player, List.of(), List.of(), null));
 
-        // Single extension (+ optional single increase)
+        List<City> incList = new ArrayList<>(increaseCities);
+
+        // Extension (+ any affordable combination of increases in different cities)
         for (City ext : expansionTargets) {
             int extCost = costMap.get(ext);
             if (availableMoney >= extCost) {
                 draws.add(draw(player, List.of(ext), List.of(), null));
-                for (City inc : validIncreaseCities(state, player, List.of(ext))) {
-                    if (availableMoney >= extCost + 1) {
-                        draws.add(draw(player, List.of(ext), List.of(inc), null));
-                    }
-                }
+                List<City> incAfterExt = new ArrayList<>(validIncreaseCities(state, player, List.of(ext)));
+                int incBudget = availableMoney - extCost;
+                addIncreaseSubsets(draws, player, List.of(ext), incAfterExt, incBudget, null);
             }
         }
 
-        // Single increase only
-        for (City inc : increaseCities) {
-            if (availableMoney >= 1) {
-                draws.add(draw(player, List.of(), List.of(inc), null));
-            }
-        }
+        // Any affordable combination of increases (no extension)
+        addIncreaseSubsets(draws, player, List.of(), incList, availableMoney, null);
 
         // --- Bonus tile draws ---
         if (bonusEligible) {
@@ -150,18 +151,11 @@ public class FranchiseService {
                 int extCost = costMap.get(ext);
                 if (moneyAvailable >= extCost) {
                     draws.add(draw(player, List.of(ext), List.of(), BonusTileUsage.MONEY));
-                    for (City inc : validIncreaseCities(state, player, List.of(ext))) {
-                        if (moneyAvailable >= extCost + 1) {
-                            draws.add(draw(player, List.of(ext), List.of(inc), BonusTileUsage.MONEY));
-                        }
-                    }
+                    List<City> incAfterExt = new ArrayList<>(validIncreaseCities(state, player, List.of(ext)));
+                    addIncreaseSubsets(draws, player, List.of(ext), incAfterExt, moneyAvailable - extCost, BonusTileUsage.MONEY);
                 }
             }
-            for (City inc : increaseCities) {
-                if (moneyAvailable >= 1) {
-                    draws.add(draw(player, List.of(), List.of(inc), BonusTileUsage.MONEY));
-                }
-            }
+            addIncreaseSubsets(draws, player, List.of(), incList, moneyAvailable, BonusTileUsage.MONEY);
 
             // EXTENSION bonus: expand to exactly 2 cities
             List<City> extList = new ArrayList<>(expansionTargets);
@@ -173,11 +167,8 @@ public class FranchiseService {
                     int cost2 = costMap.get(ext2);
                     if (availableMoney >= cost1 + cost2) {
                         draws.add(draw(player, List.of(ext1, ext2), List.of(), BonusTileUsage.EXTENSION));
-                        for (City inc : validIncreaseCities(state, player, List.of(ext1, ext2))) {
-                            if (availableMoney >= cost1 + cost2 + 1) {
-                                draws.add(draw(player, List.of(ext1, ext2), List.of(inc), BonusTileUsage.EXTENSION));
-                            }
-                        }
+                        List<City> incAfterDblExt = new ArrayList<>(validIncreaseCities(state, player, List.of(ext1, ext2)));
+                        addIncreaseSubsets(draws, player, List.of(ext1, ext2), incAfterDblExt, availableMoney - cost1 - cost2, BonusTileUsage.EXTENSION);
                     }
                 }
             }
@@ -1306,5 +1297,29 @@ public class FranchiseService {
         d.setIncrease(inc);
         d.setBonusTileUsage(bonus);
         return d;
+    }
+
+    /**
+     * Recursively generates all non-empty subsets of {@code cities} whose size does not exceed
+     * {@code budget}, adding a DrawRecord for each subset.
+     */
+    private void addIncreaseSubsets(List<DrawRecord> draws, PlayerColor player,
+                                     List<City> ext, List<City> cities,
+                                     int budget, BonusTileUsage bonus) {
+        addIncreaseSubsetsFrom(draws, player, ext, cities, budget, bonus, 0, new ArrayList<>());
+    }
+
+    private void addIncreaseSubsetsFrom(List<DrawRecord> draws, PlayerColor player,
+                                         List<City> ext, List<City> cities, int budget,
+                                         BonusTileUsage bonus, int start, List<City> current) {
+        if (!current.isEmpty()) {
+            draws.add(draw(player, ext, List.copyOf(current), bonus));
+        }
+        if (current.size() >= budget || start >= cities.size()) return;
+        for (int i = start; i < cities.size(); i++) {
+            current.add(cities.get(i));
+            addIncreaseSubsetsFrom(draws, player, ext, cities, budget, bonus, i + 1, current);
+            current.remove(current.size() - 1);
+        }
     }
 }
