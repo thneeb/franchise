@@ -70,13 +70,13 @@ paths:
       operationId: evaluateNextPossibleDraws
       responses:
         '200':
-          description: Returns all legal draws for the current player
+          description: Returns all legal draws for the current player, including their costs
           content:
             'application/json':
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/HumanDraw'
+                  $ref: '#/components/schemas/PossibleDraw'
   /franchise/{gameId}/draws:
     parameters:
       -
@@ -392,6 +392,28 @@ components:
                   $ref: '#/components/schemas/City'
               bonusTileUsage:
                 $ref: '#/components/schemas/BonusTileUsage'
+    PossibleDraw:
+      properties:
+        color:
+          $ref: '#/components/schemas/PlayerColor'
+        extension:
+          type: array
+          items:
+            $ref: '#/components/schemas/City'
+        increase:
+          type: array
+          items:
+            $ref: '#/components/schemas/City'
+        bonusTileUsage:
+          $ref: '#/components/schemas/BonusTileUsage'
+        extensionCosts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CityAndInteger'
+        increaseCost:
+          type: integer
+        totalCost:
+          type: integer
     ComputerPlayer:
       allOf:
         - $ref: '#/components/schemas/Draw'

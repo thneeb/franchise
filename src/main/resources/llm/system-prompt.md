@@ -165,18 +165,40 @@ For each open region, determine your target:
 
 Use the "Region Entry Analysis" in your prompt — the `inc to score` line tells you exactly how many increases each city needs. The "OPP LEADS" flag tells you which cities to concede.
 
-#### A2 — Build the increase list
+#### A2 — Income Impact Check (do this BEFORE deciding to score any city)
+
+Scoring a city closes it permanently. Every empty slot in that city vanishes from your income calculation **forever**. Scoring too early is the most common way to collapse your income and lose the game.
+
+Before taking majority in any city, run this check:
+1. Count your **current total empty slots** in all open large cities where you have ≥1 branch.
+2. Count the **empty slots in this city** (slots not occupied by anyone — these disappear when the city closes).
+3. New total = current total − city's empty slots.
+4. Look up both totals in the income table. Does your income bracket drop?
+
+**Delay scoring** unless at least one of these exceptions applies:
+- **Defensive**: The opponent is already in this city and 1 increase away from tying or stealing majority. You must score now or lose it.
+- **Bracket-safe**: Scoring does NOT cause an income bracket drop (new total stays in the same bracket or higher).
+- **Late game**: It is round 25 or later (income horizon is short; the penalty matters less).
+- **Region-close WIN**: Scoring this city closes a region where you lead — the region bonus justifies it.
+
+**Never score a city just because you can reach majority.** Holding at majority-1 keeps the city open and keeps you earning income from its empty slots. Score only when the timing is right.
+
+---
+
+#### A2b — Build the increase list
 
 From your WIN and CONTEST regions, collect all cities that need increases. Sort by priority:
 
-1. **Score now**: You are 1 increase away from majority in a city. Do it.
-2. **Protect lead**: You lead in a city AND opponent is also present. Increase to stay ahead (mirror strategy — see below).
-3. **Protect solo**: You are alone in a large even-slot city (4, 6, 8 slots) with exactly 1 branch. Increase to 2 immediately, before opponent enters and equalizes.
-4. **Build toward score**: You lead a large city by 1+ but need 2+ more increases. Include 1 increase per turn to advance.
+1. **Defend majority**: Opponent is in the city and 1 increase away from tying or taking majority from you. Increase immediately.
+2. **Score now (income-safe or exception)**: You are 1 increase away from majority AND the income impact check above passes (one of the four exceptions applies). Score it.
+3. **Protect lead**: You lead in a city AND opponent is also present. Increase to stay ahead (mirror strategy — see below).
+4. **Protect solo**: You are alone in a large even-slot city (4, 6, 8 slots) with exactly 1 branch. Increase to 2 immediately, before opponent enters and equalizes.
+5. **Build toward score**: You lead a large city by 1+ but need 2+ more increases. Include 1 increase per turn to advance.
 
-**Mirror strategy**:
+**Mirror strategy (with income guard)**:
 - Odd-slot cities (5, 7 slots): stay exactly 1 ahead — increase whenever the opponent increases.
 - Even-slot cities (4, 6, 8 slots): must reach 2 branches before opponent enters; from 2 you can always mirror to majority.
+- **Stop at majority-1** if taking majority now would cause an income bracket drop and no exception applies. Hold that position until it is safe to score.
 
 **Concede rule**: If opponent leads a city by 2+ branches AND you would need more increases than they do to reach majority, drop that city from your list. Spend those $1s elsewhere.
 
@@ -196,7 +218,7 @@ Pick the **first** that applies:
 
 **B3 — New region presence**: A non-blocked region where you have 0 cities. Enter it if you can afford it (pay up to $8).
 
-**B4 — Income protection**: After your planned scoring this turn, will your empty-slot count drop to ≤ 3? If so, enter a new open large city to prevent income collapse next turn.
+**B4 — Income protection**: After your planned scoring this turn, will your empty-slot count drop to ≤ 10 (income $2 or less)? If the drop would push you below a bracket threshold, enter a new open large city this turn to compensate before the income hits. Entering a new large city adds its empty slots back to your income count immediately next turn.
 
 **B5 — Region dominance**: Extend to a city that improves your region branch ranking (e.g., enter a town to help close a region you lead) or opens a cheap corridor to cities you need.
 
@@ -216,7 +238,9 @@ Find the move in the numbered list that matches this combination. If you cannot 
 
 ### STEP 2 — Income trap check (constraint on Decision B)
 
-If your planned scoring this turn would leave ≤ 3 empty slots across your open large cities, Decision B must target a new open large city regardless of other priorities. Income = $1 means you cannot afford $5+ extensions for many turns.
+If your planned scoring this turn would drop your total open-city empty-slot count below 4 (income = $1), Decision B **must** target a new open large city regardless of other priorities. Income = $1 means you cannot afford $5+ extensions for many turns and your game collapses.
+
+More broadly: track your income bracket at all times. Each time you score a city and close it, you permanently lose that city's remaining empty slots from your income. The AI that maintains the highest income for the most turns wins — scoring cities is a trade-off, not a reward in itself.
 
 ---
 

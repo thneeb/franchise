@@ -4,6 +4,8 @@ import de.neebs.franchise.boundary.http.model.*;
 import de.neebs.franchise.control.FranchiseService;
 import de.neebs.franchise.control.RegionClosureService;
 import de.neebs.franchise.entity.CalibrationConfig;
+import de.neebs.franchise.entity.CityCost;
+import de.neebs.franchise.entity.DrawCostSummary;
 import de.neebs.franchise.entity.DrawRecord;
 import de.neebs.franchise.entity.DrawResult;
 import de.neebs.franchise.entity.DurationFormatter;
@@ -59,10 +61,13 @@ public class FranchiseController implements FranchiseApi {
     }
 
     @Override
-    public ResponseEntity<List<HumanDraw>> evaluateNextPossibleDraws(String gameId) {
-        List<DrawRecord> records = franchiseService.getPossibleDraws(gameId);
-        List<HumanDraw> draws = records.stream()
-                .map(this::toHumanDraw)
+    public ResponseEntity<List<PossibleDraw>> evaluateNextPossibleDraws(String gameId) {
+        GameState state = franchiseService.getGame(gameId);
+        de.neebs.franchise.entity.PlayerColor player =
+                state.getPlayers().get(state.getCurrentPlayerIndex());
+        List<DrawRecord> records = franchiseService.getPossibleDrawsForState(state);
+        List<PossibleDraw> draws = records.stream()
+                .map(r -> toPossibleDraw(r, franchiseService.computeDrawCost(state, player, r)))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(draws);
     }
@@ -336,6 +341,30 @@ public class FranchiseController implements FranchiseApi {
     // -------------------------------------------------------------------------
     // Mapping: DrawRecord ↔ HumanDraw
     // -------------------------------------------------------------------------
+
+    private PossibleDraw toPossibleDraw(DrawRecord record, DrawCostSummary costs) {
+        PossibleDraw draw = new PossibleDraw();
+        draw.setColor(PlayerColor.valueOf(record.getColor().name()));
+        if (record.getExtension() != null) {
+            draw.setExtension(record.getExtension().stream()
+                    .map(c -> City.valueOf(c.name()))
+                    .collect(Collectors.toList()));
+        }
+        if (record.getIncrease() != null) {
+            draw.setIncrease(record.getIncrease().stream()
+                    .map(c -> City.valueOf(c.name()))
+                    .collect(Collectors.toList()));
+        }
+        if (record.getBonusTileUsage() != null) {
+            draw.setBonusTileUsage(BonusTileUsage.valueOf(record.getBonusTileUsage().name()));
+        }
+        draw.setExtensionCosts(costs.getExtensionCosts().stream()
+                .map(cc -> new CityAndInteger().city(City.valueOf(cc.getCity().name())).value(cc.getCost()))
+                .collect(Collectors.toList()));
+        draw.setIncreaseCost(costs.getIncreaseCost());
+        draw.setTotalCost(costs.getTotalCost());
+        return draw;
+    }
 
     private HumanDraw toHumanDraw(DrawRecord record) {
         HumanDraw draw = new HumanDraw();
